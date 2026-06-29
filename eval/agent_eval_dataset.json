@@ -1,0 +1,476 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "created": "2026-06-22",
+    "description": "Golden evaluation dataset for Inventory Rebalancing Cortex Agent. Tests agent efficacy with and without skills enabled.",
+    "agent": "RETAIL_SUPPLY_CHAIN_INV.AGENT.REBALANCING_AGENT",
+    "skills_tested": ["returns_rebalancing", "stockout_risk_prioritization"]
+  },
+  "test_cases": [
+    {
+      "id": "eval_001",
+      "category": "stockout_risk",
+      "question": "Which SKUs should I prioritize for reorder this week?",
+      "context": "Area manager reviewing weekly replenishment across all locations",
+      "expected_behavior": {
+        "skill_used": "stockout_risk_prioritization",
+        "tools_invoked": ["query_inventory", "query_orders", "code_execution"],
+        "reasoning_steps": [
+          "Retrieves current stock levels and reorder points",
+          "Fetches demand history and open orders",
+          "Calculates P(stockout) during lead time using code_execution",
+          "Ranks SKUs by expected cost of stockout",
+          "Produces prioritized reorder list"
+        ],
+        "output_type": "prioritized_list",
+        "key_assertions": [
+          "Uses code_execution for probability calculation",
+          "Considers margin in ranking",
+          "Produces ranked output with priority scores",
+          "Includes lead time in stockout estimation"
+        ]
+      },
+      "skill_mode": "enabled",
+      "difficulty": "complex",
+      "business_goal": "Determine optimal reorder priorities to minimize revenue loss from stockouts"
+    },
+    {
+      "id": "eval_002",
+      "category": "stockout_risk",
+      "question": "What's the stockout risk for electronics SKUs at LOC-001?",
+      "context": "Store manager checking risk for specific category and location",
+      "expected_behavior": {
+        "skill_used": "stockout_risk_prioritization",
+        "tools_invoked": ["query_inventory", "query_orders", "code_execution"],
+        "reasoning_steps": [
+          "Filters inventory to electronics category at LOC-001",
+          "Retrieves demand velocity for those SKUs",
+          "Calculates P(stockout) per SKU within lead time",
+          "Returns risk assessment for filtered scope"
+        ],
+        "output_type": "prioritized_list",
+        "key_assertions": [
+          "Filters to electronics category only",
+          "Scopes to LOC-001 location",
+          "Calculates P(stockout) probability per SKU",
+          "Shows days of supply remaining"
+        ]
+      },
+      "skill_mode": "enabled",
+      "difficulty": "moderate",
+      "business_goal": "Assess stockout exposure for a specific product category at one store"
+    },
+    {
+      "id": "eval_003",
+      "category": "stockout_risk",
+      "question": "Show me a risk-ranked replenishment list sorted by expected cost",
+      "context": "Area manager preparing purchase orders with budget constraints",
+      "expected_behavior": {
+        "skill_used": "stockout_risk_prioritization",
+        "tools_invoked": ["query_inventory", "query_orders", "query_finance", "code_execution"],
+        "reasoning_steps": [
+          "Retrieves stock levels and demand forecasts",
+          "Pulls unit margins from finance data",
+          "Computes P(stockout) via code_execution",
+          "Calculates expected_cost = P(stockout) * daily_demand * margin",
+          "Sorts by expected cost descending"
+        ],
+        "output_type": "prioritized_list",
+        "key_assertions": [
+          "Uses code_execution for probability calculation",
+          "Incorporates financial margin data",
+          "Sorts output by expected cost metric",
+          "Produces ranked output with dollar values"
+        ]
+      },
+      "skill_mode": "enabled",
+      "difficulty": "complex",
+      "business_goal": "Prioritize replenishment orders by economic impact to maximize ROI on reorder spend"
+    },
+    {
+      "id": "eval_004",
+      "category": "stockout_risk",
+      "question": "Which items have the highest probability of running out during their lead time?",
+      "context": "Logistics planner assessing supply continuity risk",
+      "expected_behavior": {
+        "skill_used": "stockout_risk_prioritization",
+        "tools_invoked": ["query_inventory", "query_orders", "code_execution"],
+        "reasoning_steps": [
+          "Retrieves current stock and lead time per SKU",
+          "Calculates demand rate from recent order history",
+          "Computes P(stockout) = P(demand > stock) during lead time",
+          "Ranks by probability descending"
+        ],
+        "output_type": "prioritized_list",
+        "key_assertions": [
+          "Includes lead time in stockout estimation",
+          "Calculates P(stockout) probability per SKU",
+          "Considers demand variability",
+          "Produces ranked output"
+        ]
+      },
+      "skill_mode": "enabled",
+      "difficulty": "moderate",
+      "business_goal": "Identify SKUs most likely to stock out before replenishment arrives"
+    },
+    {
+      "id": "eval_005",
+      "category": "stockout_risk",
+      "question": "Which SKUs should I prioritize for reorder this week?",
+      "context": "Area manager reviewing weekly replenishment — skills disabled baseline",
+      "expected_behavior": {
+        "skill_used": null,
+        "tools_invoked": ["query_inventory"],
+        "reasoning_steps": [
+          "Queries stock levels below reorder point",
+          "Returns basic list without probability modeling"
+        ],
+        "output_type": "narrative",
+        "key_assertions": [
+          "Does not use code_execution",
+          "Cannot calculate P(stockout) probability",
+          "Returns basic inventory query results only",
+          "No economic ranking by margin"
+        ]
+      },
+      "skill_mode": "disabled",
+      "difficulty": "complex",
+      "business_goal": "Baseline: see how agent handles reorder question without skill guidance"
+    },
+    {
+      "id": "eval_006",
+      "category": "stockout_risk",
+      "question": "Show me a risk-ranked replenishment list sorted by expected cost",
+      "context": "Area manager preparing purchase orders — skills disabled baseline",
+      "expected_behavior": {
+        "skill_used": null,
+        "tools_invoked": ["query_inventory"],
+        "reasoning_steps": [
+          "Attempts basic stock level query",
+          "Cannot compute expected cost without code_execution guidance",
+          "Returns partial or unranked results"
+        ],
+        "output_type": "narrative",
+        "key_assertions": [
+          "Does not use code_execution",
+          "Cannot produce economic cost ranking",
+          "Missing probability calculation",
+          "Incomplete compared to skill-enabled version"
+        ]
+      },
+      "skill_mode": "disabled",
+      "difficulty": "complex",
+      "business_goal": "Baseline: confirm degradation in analytical depth without skills"
+    },
+    {
+      "id": "eval_007",
+      "category": "stockout_risk",
+      "question": "Rank my inventory by reorder urgency",
+      "context": "Store manager wanting quick prioritization — skills disabled",
+      "expected_behavior": {
+        "skill_used": null,
+        "tools_invoked": ["query_inventory"],
+        "reasoning_steps": [
+          "Queries stock levels and reorder points",
+          "May sort by simple stock-to-reorder ratio",
+          "No probabilistic modeling available"
+        ],
+        "output_type": "narrative",
+        "key_assertions": [
+          "Does not use code_execution",
+          "Cannot calculate P(stockout) probability",
+          "May produce basic sorted list but without statistical rigor",
+          "No demand forecast integration"
+        ]
+      },
+      "skill_mode": "disabled",
+      "difficulty": "moderate",
+      "business_goal": "Baseline: measure what urgency ranking looks like without probabilistic skill"
+    },
+    {
+      "id": "eval_008",
+      "category": "returns_rebalancing",
+      "question": "Analyze pending returns and recommend dispositions",
+      "context": "Area manager reviewing all pending returns for optimal placement",
+      "expected_behavior": {
+        "skill_used": "returns_rebalancing",
+        "tools_invoked": ["query_returns", "query_inventory", "query_finance", "code_execution"],
+        "reasoning_steps": [
+          "Retrieves all pending returns with condition data",
+          "Checks demand signals at potential destination locations",
+          "Calculates transfer cost vs restock value",
+          "Applies disposition logic: restock, transfer, or liquidate",
+          "Computes net benefit per return batch",
+          "Produces disposition table with recommendations",
+          "Summarizes total recovery value"
+        ],
+        "output_type": "disposition_table",
+        "key_assertions": [
+          "Produces disposition recommendations (restock/transfer/liquidate)",
+          "Considers item condition in disposition",
+          "Evaluates demand at destination locations",
+          "Calculates economic cost-benefit per recommendation"
+        ]
+      },
+      "skill_mode": "enabled",
+      "difficulty": "complex",
+      "business_goal": "Maximize value recovery from returned inventory through optimal placement"
+    },
+    {
+      "id": "eval_009",
+      "category": "returns_rebalancing",
+      "question": "Which returned SKUs should be transferred to high-demand locations?",
+      "context": "Logistics coordinator identifying transfer opportunities",
+      "expected_behavior": {
+        "skill_used": "returns_rebalancing",
+        "tools_invoked": ["query_returns", "query_inventory", "query_orders", "code_execution"],
+        "reasoning_steps": [
+          "Identifies returned SKUs in transferable condition",
+          "Finds locations with high demand and low stock for those SKUs",
+          "Evaluates transfer cost against demand value",
+          "Recommends transfers where net benefit is positive"
+        ],
+        "output_type": "disposition_table",
+        "key_assertions": [
+          "Matches returned SKUs to demand signals at other locations",
+          "Evaluates demand at destination locations",
+          "Considers transfer logistics cost",
+          "Produces ranked transfer recommendations"
+        ]
+      },
+      "skill_mode": "enabled",
+      "difficulty": "moderate",
+      "business_goal": "Identify profitable transfer opportunities for returned goods"
+    },
+    {
+      "id": "eval_010",
+      "category": "returns_rebalancing",
+      "question": "What should we do with the returned SKU-E001 units at LOC-003?",
+      "context": "Store manager seeking disposition for specific returned SKU",
+      "expected_behavior": {
+        "skill_used": "returns_rebalancing",
+        "tools_invoked": ["query_returns", "query_inventory", "query_finance", "code_execution"],
+        "reasoning_steps": [
+          "Retrieves return details for SKU-E001 at LOC-003",
+          "Checks condition and quantity of returned units",
+          "Evaluates local demand vs other locations",
+          "Calculates restock value vs transfer cost vs liquidation",
+          "Recommends optimal disposition"
+        ],
+        "output_type": "disposition_table",
+        "key_assertions": [
+          "Scopes analysis to SKU-E001 at LOC-003",
+          "Considers item condition in disposition",
+          "Compares restock, transfer, and liquidate options",
+          "Provides specific dollar-value recommendation"
+        ]
+      },
+      "skill_mode": "enabled",
+      "difficulty": "moderate",
+      "business_goal": "Determine the most profitable action for a specific returned SKU at a specific location"
+    },
+    {
+      "id": "eval_011",
+      "category": "returns_rebalancing",
+      "question": "Show me the cost-benefit of transferring returned goods vs liquidating",
+      "context": "Finance analyst comparing disposition strategies",
+      "expected_behavior": {
+        "skill_used": "returns_rebalancing",
+        "tools_invoked": ["query_returns", "query_inventory", "query_finance", "query_logistics", "code_execution"],
+        "reasoning_steps": [
+          "Retrieves pending returns with condition and value data",
+          "Calculates transfer cost per batch (shipping, handling)",
+          "Estimates resale value at destination vs liquidation value",
+          "Computes net benefit for transfer vs liquidation per batch",
+          "Produces comparison table"
+        ],
+        "output_type": "disposition_table",
+        "key_assertions": [
+          "Calculates economic cost-benefit per recommendation",
+          "Compares transfer and liquidation paths",
+          "Includes logistics cost in transfer calculation",
+          "Shows net dollar benefit per disposition path"
+        ]
+      },
+      "skill_mode": "enabled",
+      "difficulty": "complex",
+      "business_goal": "Quantify the financial trade-off between transferring returns to demand locations vs liquidating"
+    },
+    {
+      "id": "eval_012",
+      "category": "returns_rebalancing",
+      "question": "Analyze pending returns and recommend dispositions",
+      "context": "Area manager reviewing returns — skills disabled baseline",
+      "expected_behavior": {
+        "skill_used": null,
+        "tools_invoked": ["query_returns"],
+        "reasoning_steps": [
+          "Queries returns table for pending items",
+          "Returns basic list without disposition logic",
+          "No cost-benefit calculation performed"
+        ],
+        "output_type": "narrative",
+        "key_assertions": [
+          "Does not use code_execution for disposition logic",
+          "Cannot produce structured disposition recommendations",
+          "No economic analysis of restock vs transfer vs liquidate",
+          "Returns raw data without actionable recommendations"
+        ]
+      },
+      "skill_mode": "disabled",
+      "difficulty": "complex",
+      "business_goal": "Baseline: confirm agent cannot produce sophisticated disposition analysis without skill"
+    },
+    {
+      "id": "eval_013",
+      "category": "returns_rebalancing",
+      "question": "What should we do with the returned SKU-E001 units at LOC-003?",
+      "context": "Store manager seeking disposition — skills disabled baseline",
+      "expected_behavior": {
+        "skill_used": null,
+        "tools_invoked": ["query_returns", "query_inventory"],
+        "reasoning_steps": [
+          "Queries return status for SKU-E001 at LOC-003",
+          "May retrieve basic stock info",
+          "Cannot perform multi-factor disposition analysis"
+        ],
+        "output_type": "narrative",
+        "key_assertions": [
+          "Does not use code_execution for disposition logic",
+          "Cannot compare restock vs transfer vs liquidate",
+          "No cost-benefit calculation",
+          "Provides factual data but no actionable recommendation"
+        ]
+      },
+      "skill_mode": "disabled",
+      "difficulty": "moderate",
+      "business_goal": "Baseline: measure quality gap for specific SKU disposition without skill guidance"
+    },
+    {
+      "id": "eval_014",
+      "category": "returns_rebalancing",
+      "question": "Recommend what to do with returns at my location",
+      "context": "Store manager at LOC-002 wanting return handling guidance — skills disabled",
+      "expected_behavior": {
+        "skill_used": null,
+        "tools_invoked": ["query_returns"],
+        "reasoning_steps": [
+          "Queries returns at the user's location",
+          "Returns list of pending returns",
+          "Cannot apply disposition framework without skill"
+        ],
+        "output_type": "narrative",
+        "key_assertions": [
+          "Does not use code_execution for disposition logic",
+          "Cannot produce structured disposition recommendations",
+          "May suggest generic handling but no optimized routing",
+          "No demand-based transfer recommendations"
+        ]
+      },
+      "skill_mode": "disabled",
+      "difficulty": "moderate",
+      "business_goal": "Baseline: see how agent handles return disposition request without structured workflow"
+    },
+    {
+      "id": "eval_015",
+      "category": "cross_domain",
+      "question": "I need a complete inventory action plan: which items to reorder urgently AND which returns to rebalance",
+      "context": "Area manager doing end-of-week planning across both domains",
+      "expected_behavior": {
+        "skill_used": "stockout_risk_prioritization",
+        "tools_invoked": ["query_inventory", "query_orders", "query_returns", "query_finance", "code_execution"],
+        "reasoning_steps": [
+          "Activates stockout risk skill for reorder prioritization",
+          "Calculates P(stockout) and ranks reorder urgency",
+          "Activates returns rebalancing skill for disposition",
+          "Produces combined action plan with both reorder and return actions"
+        ],
+        "output_type": "prioritized_list",
+        "key_assertions": [
+          "Uses code_execution for probability calculation",
+          "Produces disposition recommendations (restock/transfer/liquidate)",
+          "Addresses both reorder and returns in response",
+          "Produces ranked output covering both domains"
+        ]
+      },
+      "skill_mode": "enabled",
+      "difficulty": "complex",
+      "business_goal": "Generate a unified weekly action plan covering both replenishment and returns rebalancing"
+    },
+    {
+      "id": "eval_016",
+      "category": "cross_domain",
+      "question": "For SKU-E001, show me both the stockout risk AND optimal disposition of returned units",
+      "context": "Manager investigating a single high-value SKU from both angles",
+      "expected_behavior": {
+        "skill_used": "stockout_risk_prioritization",
+        "tools_invoked": ["query_inventory", "query_orders", "query_returns", "query_finance", "code_execution"],
+        "reasoning_steps": [
+          "Retrieves stock level and demand for SKU-E001",
+          "Calculates P(stockout) during lead time",
+          "Retrieves returned units of SKU-E001",
+          "Evaluates disposition options considering stockout risk",
+          "May recommend restocking returns to offset stockout risk"
+        ],
+        "output_type": "prioritized_list",
+        "key_assertions": [
+          "Calculates P(stockout) probability per SKU",
+          "Produces disposition recommendations (restock/transfer/liquidate)",
+          "Connects stockout risk to return disposition decision",
+          "Scopes analysis to SKU-E001"
+        ]
+      },
+      "skill_mode": "enabled",
+      "difficulty": "complex",
+      "business_goal": "Holistic view of a single SKU combining supply risk and return recovery opportunity"
+    },
+    {
+      "id": "eval_017",
+      "category": "general_query",
+      "question": "What's the current stock level at LOC-001?",
+      "context": "Store manager checking basic inventory",
+      "expected_behavior": {
+        "skill_used": null,
+        "tools_invoked": ["query_inventory"],
+        "reasoning_steps": [
+          "Queries stock levels filtered to LOC-001",
+          "Returns current quantities by SKU"
+        ],
+        "output_type": "narrative",
+        "key_assertions": [
+          "Queries inventory data for LOC-001",
+          "Returns stock quantities",
+          "Does not require code_execution or skill activation"
+        ]
+      },
+      "skill_mode": "enabled",
+      "difficulty": "simple",
+      "business_goal": "Quick factual lookup of current inventory at a specific location"
+    },
+    {
+      "id": "eval_018",
+      "category": "general_query",
+      "question": "Show me the return rate trend for the last 30 days",
+      "context": "Manager reviewing return trends",
+      "expected_behavior": {
+        "skill_used": null,
+        "tools_invoked": ["query_orders", "data_to_chart"],
+        "reasoning_steps": [
+          "Queries order and return data for last 30 days",
+          "Calculates daily return rate",
+          "Produces visualization of trend"
+        ],
+        "output_type": "visualization",
+        "key_assertions": [
+          "Queries return data over 30-day window",
+          "Produces a visualization or chart",
+          "Shows trend over time",
+          "Does not require skill activation"
+        ]
+      },
+      "skill_mode": "enabled",
+      "difficulty": "simple",
+      "business_goal": "Visual trend analysis of return rates to identify patterns or anomalies"
+    }
+  ]
+}

@@ -1,0 +1,213 @@
+version: 2
+
+sources:
+  - name: inventory
+    database: RETAIL_SUPPLY_CHAIN_DB
+    schema: INVENTORY
+    description: Products, stock levels, and location master data
+    tables:
+      - name: LOCATIONS
+        description: All fulfillment/storage locations
+        columns:
+          - name: LOCATION_ID
+            description: Primary key for the location
+          - name: LOCATION_NAME
+            description: Human-readable location name
+          - name: LOCATION_TYPE
+            description: "Type of location: WAREHOUSE, STORE, FULFILLMENT_CENTER"
+          - name: REGION
+            description: Geographic region
+          - name: ADDRESS
+            description: Physical address
+          - name: CAPACITY_UNITS
+            description: Maximum storage capacity in units
+
+      - name: PRODUCTS
+        description: SKU master with product attributes
+        columns:
+          - name: SKU
+            description: Primary key product identifier
+          - name: PRODUCT_NAME
+            description: Product display name
+          - name: CATEGORY
+            description: "Product category: Electronics, Apparel, Home & Garden, Sports, Beauty"
+          - name: SUBCATEGORY
+            description: Product subcategory
+          - name: UNIT_WEIGHT_KG
+            description: Weight per unit in kilograms
+          - name: LEAD_TIME_DAYS
+            description: Supplier replenishment lead time in calendar days
+          - name: CREATED_AT
+            description: Timestamp when the product was added
+
+      - name: STOCK_LEVELS
+        description: Current on-hand inventory by SKU and location
+        columns:
+          - name: SKU
+            description: Product SKU identifier
+          - name: LOCATION_ID
+            description: Location where stock is held
+          - name: SNAPSHOT_DATE
+            description: Date this stock level was recorded
+          - name: QUANTITY_ON_HAND
+            description: Units physically available
+          - name: QUANTITY_RESERVED
+            description: Units allocated to open orders
+          - name: BATCH_RECEIVED_DATE
+            description: Date the batch was received at the location
+          - name: REORDER_POINT
+            description: Minimum stock threshold that triggers replenishment
+
+      - name: DATE_DIMENSION
+        description: Calendar dimension table for the current year
+        columns:
+          - name: DATE_KEY
+            description: Primary key date value
+          - name: DAY_OF_WEEK
+            description: Numeric day of the week
+          - name: DAY_NAME
+            description: Name of the day (Mon, Tue, etc.)
+          - name: MONTH_NUM
+            description: Numeric month (1-12)
+          - name: MONTH_NAME
+            description: Abbreviated month name
+          - name: QUARTER
+            description: Quarter number (1-4)
+          - name: YEAR
+            description: Four-digit year
+          - name: IS_WEEKEND
+            description: Whether the date falls on a weekend
+          - name: IS_HOLIDAY
+            description: Whether the date is a recognized holiday
+
+  - name: orders
+    database: RETAIL_SUPPLY_CHAIN_DB
+    schema: ORDERS
+    description: Order headers, order lines, demand forecasts, and customer returns
+    tables:
+      - name: ORDER_HEADERS
+        description: Order-level data with status and channel
+        columns:
+          - name: ORDER_ID
+            description: Primary key for the order
+          - name: CUSTOMER_ID
+            description: Customer placing the order
+          - name: ORDER_DATE
+            description: Date the order was placed
+          - name: ORDER_STATUS
+            description: "Order status: Pending, Processing, Shipped, Delivered, Cancelled"
+          - name: SALES_CHANNEL
+            description: "Channel of sale: Online, In-Store, Wholesale"
+          - name: FULFILLMENT_LOCATION_ID
+            description: Location fulfilling the order
+          - name: TOTAL_AMOUNT
+            description: Total order value
+          - name: SHIPPING_METHOD
+            description: "Shipping method: Standard, Express, Overnight"
+
+      - name: ORDER_LINES
+        description: Line-item detail for orders
+        columns:
+          - name: ORDER_LINE_ID
+            description: Primary key for the order line
+          - name: ORDER_ID
+            description: Parent order identifier
+          - name: SKU
+            description: Product SKU ordered
+          - name: QUANTITY
+            description: Units ordered on this line
+          - name: UNIT_PRICE
+            description: Price per unit at time of order
+          - name: LINE_TOTAL
+            description: Computed line total (QUANTITY * UNIT_PRICE)
+          - name: LINE_STATUS
+            description: "Line status: Pending, Fulfilled, Backordered, Cancelled"
+
+      - name: CUSTOMER_RETURNS
+        description: Individual return records with condition and eligibility
+        columns:
+          - name: RETURN_ID
+            description: Primary key for the return
+          - name: ORDER_ID
+            description: Original order associated with the return
+          - name: ORDER_LINE_ID
+            description: Order line associated with the return
+          - name: SKU
+            description: Product SKU being returned
+          - name: RETURN_DATE
+            description: Date the return was processed
+          - name: RETURN_REASON
+            description: "Reason for return: Defective, Wrong Item, Not as Described, Changed Mind, Too Late"
+          - name: RETURN_CHANNEL
+            description: "Channel of return: ONLINE, IN_STORE, MAIL"
+          - name: ORIGINAL_SALE_CHANNEL
+            description: "Original sale channel: Online, In-Store, Wholesale"
+          - name: ITEM_CONDITION
+            description: "Condition of returned item: New, Like New, Good, Fair, Poor"
+          - name: QUANTITY_RETURNED
+            description: Number of units returned
+          - name: RECEIVING_LOCATION_ID
+            description: Location that received the returned item
+          - name: DISPOSITION_STATUS
+            description: "Disposition status: Pending, Restocked, Refurbished, Liquidated, Disposed"
+          - name: REFUND_AMOUNT
+            description: Refund amount issued for the return
+          - name: RETURN_INITIATED_DATE
+            description: Date the return was initiated by the customer
+          - name: RETURN_RECEIVED_DATE
+            description: Date the return was received at the location (NULL if pending)
+
+      - name: DEMAND_FORECAST
+        description: Forward-looking demand forecasts by location
+        columns:
+          - name: FORECAST_ID
+            description: Primary key for the forecast record
+          - name: SKU
+            description: Product SKU being forecasted
+          - name: LOCATION_ID
+            description: Location for the forecast
+          - name: FORECAST_DATE
+            description: Date the forecast applies to
+          - name: FORECASTED_UNITS
+            description: Predicted demand in units
+          - name: CONFIDENCE_LEVEL
+            description: Forecast confidence score (0.00-1.00)
+          - name: MODEL_VERSION
+            description: Version identifier of the forecasting model
+
+  - name: finance
+    database: RETAIL_SUPPLY_CHAIN_DB
+    schema: FINANCE
+    description: Product costs, shipping costs, and disposition thresholds
+    tables:
+      - name: PRODUCT_COSTS
+        description: COGS, selling prices, margins, and liquidation values by channel
+        columns:
+          - name: SKU
+            description: Product identifier (composite PK with CHANNEL)
+          - name: CHANNEL
+            description: "Sales channel: Online, In-Store, Wholesale"
+          - name: COGS
+            description: Cost of goods sold per unit
+          - name: SELLING_PRICE
+            description: Selling price per unit for this channel
+          - name: GROSS_MARGIN
+            description: Gross margin ratio (selling_price - COGS) / selling_price
+          - name: LIQUIDATION_VALUE
+            description: Recovery value if liquidated
+
+      - name: SHIPPING_COSTS
+        description: Inter-location shipping costs and transit times
+        columns:
+          - name: ORIGIN_LOCATION_ID
+            description: Starting location (composite PK)
+          - name: DESTINATION_LOCATION_ID
+            description: Ending location (composite PK)
+          - name: COST_PER_UNIT
+            description: Shipping cost per unit
+          - name: COST_PER_KG
+            description: Shipping cost per kilogram
+          - name: TRANSIT_DAYS
+            description: Number of days in transit
+          - name: CARRIER
+            description: Shipping carrier

@@ -1,0 +1,20 @@
+version: 2
+
+models:
+  - name: daily_return_rates_by_sku_channel
+    description: Daily pre-aggregated return rates by SKU, channel, and location
+    columns:
+      - name: SKU
+        description: Product SKU identifier
+      - name: SALE_CHANNEL
+        description: Channel of the return
+      - name: RECEIVING_LOCATION_ID
+        description: Location that received the returned item
+      - name: AGGREGATION_DT
+        description: Date of aggregation
+      - name: UNITS_SOLD
+        description: Total units sold for the SKU/channel/location
+      - name: UNITS_RETURNED
+        description: Total units returned for the SKU/channel/location
+      - name: RETURN_RATE
+        description: Ratio of units returned to units sold

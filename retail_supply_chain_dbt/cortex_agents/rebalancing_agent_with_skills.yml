@@ -1,0 +1,182 @@
+models:
+  orchestration: auto
+
+orchestration:
+  budget:
+    seconds: 900
+    tokens: 400000
+
+instructions:
+  response: |-
+    Response Style:
+    - Lead with the direct answer, then provide supporting data.
+    - Use tables for multi-row results (3+ items).
+    - Use data_to_chart for trends, comparisons, and distributions.
+    - Be concise — supply chain users are action-oriented.
+
+    Data Presentation:
+    - Always include units (qty, $, %, days) with numbers.
+    - For single values, state directly without a table.
+    - For large result sets, summarize top items and offer to show more.
+
+    When a skill produces a structured recommendation (e.g., disposition table),
+    present it exactly as the skill specifies.
+
+  orchestration: |-
+    Your Role: You are a retail supply chain assistant for area managers and
+    store managers. You answer questions about inventory, orders, returns,
+    and finance across a multi-location retail network.
+
+    Skill-First Routing:
+    Before answering, check if the user's intent matches an available skill.
+    If it does, delegate to that skill and follow its workflow exactly.
+    
+    Only reason and answer directly for questions that do not match any skill. 
+    You can use relevant tools you have in order to answer the question.
+
+    Tool Selection:
+    - Return volumes, reasons, conditions, trends, per-SKU return rates → query_orders
+    - Open orders, demand forecasts → query_orders
+    - Stock levels, reorder points, lead time, capacity → query_inventory
+    - Margins, COGS, shipping costs, liquidation values, refurbishment costs → query_finance
+    - Visualize any result set → data_to_chart
+    - Execute approved disposition → trigger_disposition_action
+
+    Boundaries:
+    - You cannot modify inventory records directly — only trigger notifications.
+    - Do not access supplier or procurement data (not available).
+    - Never fabricate data. If a tool returns no results, say so clearly.
+    - Do not execute trigger_disposition_action without explicit user approval.
+
+    Defaults:
+    - Always root your answers in the data you have access to through the tools provided.
+    - Do not makeup a fake answer.
+    - When no time range is specified, use last 30 days.
+    - Parallelize tool calls where possible for latency.
+
+  sample_questions:
+    - question: "Which returned SKUs should be rebalanced this week?"
+    - question: "Show me the return rate trends for my location"
+    - question: "What is the current stock status across my locations?"
+    - question: "Analyze pending returns and recommend dispositions"
+    - question: "Which SKUs should I prioritize for reorder this week?"
+
+tools:
+  - tool_spec:
+      type: cortex_analyst_text_to_sql
+      name: query_inventory
+      description: |-
+        Query inventory positions: on-hand quantities, reserved stock, available units,
+        reorder points, lead time days, product attributes (weight),
+        location details (capacity, region, type). Use to find understocked locations
+        and retrieve lead time inputs for stockout risk calculations.
+
+  - tool_spec:
+      type: cortex_analyst_text_to_sql
+      name: query_orders
+      description: |-
+        Query demand and returns data: open orders by fulfillment location, demand
+        forecasts with confidence weighting, order volumes by channel, customer returns
+        by SKU/location/condition, daily return rate trends, and per-SKU return rates.
+        Use for demand signals AND return inflow analysis.
+
+  - tool_spec:
+      type: cortex_analyst_text_to_sql
+      name: query_finance
+      description: |-
+        Query financial data: COGS, selling prices, margins by channel, liquidation
+        values, shipping costs between locations, refurbishment costs and success rates
+        by item condition and category.
+        Use to evaluate economics of restock vs transfer vs liquidation.
+
+  - tool_spec:
+      type: data_to_chart
+      name: data_to_chart
+      description: |-
+        Generates visualizations from query result data. Use for trends, comparisons,
+        and distributions.
+
+  - tool_spec:
+      type: code_execution
+      name: code_execution
+
+  - tool_spec:
+      type: generic
+      name: trigger_disposition_action
+      description: |-
+        Triggers a disposition action (REBALANCE or LIQUIDATE) by generating an
+        AI-composed notification email and sending it to the specified recipient.
+        Use ONLY after the user has explicitly approved the disposition recommendation.
+        Requires Area Manager role.
+      input_schema:
+        type: object
+        properties:
+          action_type:
+            type: string
+            description: "Disposition action: 'REBALANCE' or 'LIQUIDATE'"
+          sku:
+            type: string
+            description: "Product SKU to action"
+          quantity:
+            type: integer
+            description: "Number of units"
+          from_location:
+            type: string
+            description: "Origin location ID (where the returned goods are)"
+          to_location:
+            type: string
+            description: "Destination location ID (for REBALANCE). Omit or pass null for LIQUIDATE."
+          recipient_email:
+            type: string
+            description: "Email address to send the notification to"
+        required:
+          - action_type
+          - sku
+          - quantity
+          - from_location
+          - recipient_email
+
+tool_resources:
+  query_inventory:
+    semantic_view: RETAIL_SUPPLY_CHAIN_DB.AGENT.INVENTORY_SV
+    execution_environment:
+      type: warehouse
+      warehouse: COCO_SANDBOX_WH
+      query_timeout: 299
+
+  query_orders:
+    semantic_view: RETAIL_SUPPLY_CHAIN_DB.AGENT.ORDERS_SV
+    execution_environment:
+      type: warehouse
+      warehouse: COCO_SANDBOX_WH
+      query_timeout: 299
+
+  query_finance:
+    semantic_view: RETAIL_SUPPLY_CHAIN_DB.AGENT.FINANCE_SV
+    execution_environment:
+      type: warehouse
+      warehouse: COCO_SANDBOX_WH
+      query_timeout: 299
+
+  trigger_disposition_action:
+    type: procedure
+    identifier: RETAIL_SUPPLY_CHAIN_DB.AGENT.TRIGGER_DISPOSITION_ACTION
+    execution_environment:
+      type: warehouse
+      warehouse: COCO_SANDBOX_WH
+
+  code_execution:
+    artifact_repositories:
+      - SNOWFLAKE.SNOWPARK.PYPI_SHARED_REPOSITORY
+
+
+skills:
+  - name: returns_rebalancing
+    source:
+      type: STAGE
+      path: "@RETAIL_SUPPLY_CHAIN_DB.AGENT.SKILLS_STAGE/skills/returns_rebalancing"
+
+  - name: stockout_risk_prioritization
+    source:
+      type: STAGE
+      path: "@RETAIL_SUPPLY_CHAIN_DB.AGENT.SKILLS_STAGE/skills/stockout_risk_prioritization"

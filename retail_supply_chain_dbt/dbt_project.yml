@@ -1,0 +1,29 @@
+name: 'retail_supply_chain_dbt'
+version: '1.0.0'
+config-version: 2
+profile: 'retail_supply_chain_dbt'
+
+vars:
+  snowflake_intelligence_object: 'SNOWFLAKE_INTELLIGENCE_OBJECT_DEFAULT'
+  toggle_si_agent_deployment: true
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+snapshot-paths: ["snapshots"]
+analysis-paths: ["analyses"]
+
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  retail_supply_chain_dbt:
+    orders:
+      +schema: orders
+      +materialized: table
+      +tags: ['daily']
+    semantic_views:
+      +schema: agent
+      +materialized: semantic_view
