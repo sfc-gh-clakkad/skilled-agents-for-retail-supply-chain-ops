@@ -1,6 +1,6 @@
 # Skilled Agents for Retail Supply Chain
 
-This project builds an AI-powered retail supply chain co-worker built on [Snowflake Cortex Agents](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agent) and Snowflake Co-Work. It demonstrates how to extend a Cortex Agent beyond basic Q&A into a system that automates real-world inventory management workflows. The agent answers natural language questions about inventory, orders, returns, and finance across a multi-location retail network — and uses two specialized skills to orchestrate multi-step analytical workflows that go beyond simple data lookups.
+This project builds an AI-powered retail supply chain co-worker built on [Snowflake Cortex Agents](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agent) and [Snowflake Co-Work](https://docs.snowflake.com/en/user-guide/snowflake-cortex/snowflake-cowork). It demonstrates how to extend a Cortex Agent beyond basic Q&A into a system that automates real-world inventory management workflows. The agent answers natural language questions about inventory, orders, returns, and finance across a multi-location retail network — and uses two specialized skills to orchestrate multi-step analytical workflows that go beyond simple data lookups.
 
 The agent that powers CoWork automates not just the process of getting insights from retail supply chain data, but executes business processes as laid out through skills on a human operational manager's commands.
 
