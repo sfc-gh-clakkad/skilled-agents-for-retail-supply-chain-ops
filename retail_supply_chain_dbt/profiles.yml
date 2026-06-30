@@ -5,7 +5,7 @@ retail_supply_chain_dbt:
       type: snowflake
       account: "placeholder"
       user: "placeholder"
-      role: "<YOUR_ROLE>"
+      role: "COCO_CLI_SANDBOX_ROLE"
       database: "RETAIL_SUPPLY_CHAIN_DB"
       warehouse: "RETAIL_SUPPLY_CHAIN_QS_WH"
       schema: "PUBLIC"

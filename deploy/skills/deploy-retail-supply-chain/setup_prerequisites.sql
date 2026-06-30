@@ -60,9 +60,15 @@ CREATE OR REPLACE NOTIFICATION INTEGRATION INVENTORY_EMAIL_INTEGRATION
 -- The dbt project uses the Snowflake-Labs/dbt_semantic_view package from the
 -- dbt hub. When deployed as a Snowflake-native dbt project (via snow dbt deploy),
 -- Snowflake needs network egress to resolve this dependency.
+--
+-- The network rule and EAI live in a dedicated SHARED_OBJECTS database so they
+-- can be reused across projects without coupling to the project database.
 -- #############################################################################
 
-CREATE OR REPLACE NETWORK RULE DBT_PACKAGES_NETWORK_RULE
+CREATE OR REPLACE DATABASE SHARED_OBJECTS
+  COMMENT = 'Shared account-level objects: network rules, external access integrations';
+
+CREATE OR REPLACE NETWORK RULE SHARED_OBJECTS.PUBLIC.DBT_PACKAGES_NETWORK_RULE
   MODE = EGRESS
   TYPE = HOST_PORT
   VALUE_LIST = (
@@ -72,7 +78,7 @@ CREATE OR REPLACE NETWORK RULE DBT_PACKAGES_NETWORK_RULE
   COMMENT = 'Allows dbt deps to fetch packages from dbt hub and GitHub';
 
 CREATE OR REPLACE EXTERNAL ACCESS INTEGRATION DBT_PACKAGES_EAI
-  ALLOWED_NETWORK_RULES = (DBT_PACKAGES_NETWORK_RULE)
+  ALLOWED_NETWORK_RULES = (SHARED_OBJECTS.PUBLIC.DBT_PACKAGES_NETWORK_RULE)
   ENABLED = TRUE
   COMMENT = 'EAI for dbt package resolution (dbt_semantic_view from hub.getdbt.com)';
 
@@ -81,6 +87,8 @@ CREATE OR REPLACE EXTERNAL ACCESS INTEGRATION DBT_PACKAGES_EAI
 -- Replace <YOUR_ROLE> with your deployment role if different.
 -- #############################################################################
 
+GRANT USAGE ON DATABASE SHARED_OBJECTS TO ROLE <YOUR_ROLE>;
+GRANT USAGE ON SCHEMA SHARED_OBJECTS.PUBLIC TO ROLE <YOUR_ROLE>;
 GRANT USAGE ON INTEGRATION INVENTORY_EMAIL_INTEGRATION TO ROLE <YOUR_ROLE>;
 GRANT USAGE ON INTEGRATION DBT_PACKAGES_EAI TO ROLE <YOUR_ROLE>;
 

@@ -2,27 +2,21 @@
 name: deploy-retail-supply-chain
 description: >
   Deploy the agentic retail supply chain inventory project end-to-end.
-  Handles full fresh deployments and targeted incremental updates (agent,
-  skills, or models only). Use when: deploy project, redeploy, update agent
-  spec, update skills, rebuild semantic views, run deployment, deploy retail
-  supply chain, deploy inventory agent, deploy inventory project.
+  Handles full fresh deployments, targeted incremental updates (agent,
+  skills, or models only), and teardown (remove all resources). Use when:
+  deploy project, redeploy, update agent spec, update skills, rebuild
+  semantic views, run deployment, deploy retail supply chain, deploy inventory
+  agent, deploy inventory project, teardown, remove project, cleanup, uninstall.
 ---
 
 # Deploy Retail Supply Chain Inventory
 
 Orchestrates the full deployment from infrastructure through Cortex Agent.
-All SQL executes via `snowflake_sql_execute` (CoCo's built-in Snowflake tool).
-PUT commands via Bash (client-side). dbt runs server-side via `snow dbt deploy`
-and `snow dbt execute`.
+SQL via `snowflake_sql_execute`; PUT commands via Bash (client-side); dbt via
+`snow dbt deploy` / `snow dbt execute` (server-side).
 
-**SQL execution rule**: When running statements from a `.sql` file, batch
-multiple independent statements into a single `snowflake_sql_execute` call
-(semicolon-separated) rather than executing one at a time. Only execute
-individually when a later statement depends on the result of an earlier one
-(e.g., CREATE SCHEMA before CREATE TABLE in that schema).
-
-The working directory for Bash commands is the **project root**
-(`agentic-inventory-management/`).
+**SQL batching**: Batch independent statements (semicolon-separated) into one
+`snowflake_sql_execute` call. Execute sequentially only when dependencies exist.
 
 ## Workflow
 
@@ -34,22 +28,19 @@ Ask before running anything:
 1. Deployment role name? (default: current session role from CoCo connection)
 2. External Access Integration name for dbt packages? (default: DBT_PACKAGES_EAI)
 3. Deployment scope — pick one:
-   a. Full   — infrastructure + data + agent (fresh or rebuild)
-   b. Update — agent spec / skills / models only (skip infra + data)
-   c. Data   — reseed source tables + rebuild models (skip agent deploy)
+   a. Full     — infrastructure + data + agent (fresh or rebuild)
+   b. Update   — agent spec / skills / models only (skip infra + data)
+   c. Data     — reseed source tables + rebuild models (skip agent deploy)
+   d. Teardown — remove ALL project resources (destructive, irreversible)
 ```
 
-**MANDATORY — do this BEFORE any SQL execution:**
+**Before any SQL execution:**
 
-1. Confirm the current role via `SELECT CURRENT_ROLE();`
-2. Store the role name and EAI name as variables for this session.
-3. When reading SQL from `setup_prerequisites.sql` or `project_scaffolding_deploy.sql`,
-   replace `<YOUR_ROLE>` with the confirmed role name **in memory** before executing.
-   Do NOT edit the source `.sql` files on disk.
-4. For `profiles.yml`: the `role` field is not ignored in Snowflake-managed dbt execution
-   (the deployed project runs under the caller's session role). Edit this file to replace placeholder with confirmed role.
+1. Confirm role via `SELECT CURRENT_ROLE();` and store role + EAI names.
+2. Substitute `<YOUR_ROLE>` in memory when reading `.sql` files (do NOT edit files on disk).
+3. Edit `profiles.yml` to set the `role` field to the confirmed role.
 
-Do NOT proceed to Step 2 until the role and EAI are confirmed.
+Do NOT proceed until role and EAI are confirmed.
 
 ### Step 2: Account-Level Prerequisites (one-time, ACCOUNTADMIN)
 
@@ -78,20 +69,12 @@ Do NOT proceed until confirmation is received.
 ### Step 3: Infrastructure — Full scope only
 
 Read `project_scaffolding_deploy.sql`, substitute `<YOUR_ROLE>` → confirmed
-role name in memory, and execute each statement via `snowflake_sql_execute`.
-Execute statements **one at a time** in order.
-
-Stop immediately if any statement fails — later steps depend on objects
-created here.
+role, execute statements one at a time in order. Stop on any failure.
 
 ### Step 4: Seed Source Data — Full or Data scope
 
-Read `seed_source_data.sql` and execute each statement via
-`snowflake_sql_execute` in order.
-
-All INSERT statements use `INSERT OVERWRITE INTO` — this makes them
-idempotent (replaces existing data atomically, no separate TRUNCATE needed).
-Re-running is always safe.
+Read `seed_source_data.sql` and execute each statement in order.
+Statements use `INSERT OVERWRITE INTO` (idempotent, safe to re-run).
 
 ### Step 5: Upload Agent Spec and Skills to Stage
 
@@ -112,12 +95,7 @@ proceeding. If any fail, check the working directory and file paths.
 
 ### Step 6: Deploy & Execute dbt Project
 
-**CRITICAL: Execute the commands in this step EXACTLY as written. Do NOT
-generate alternative SQL, modify the syntax, or improvise dbt commands.
-These commands have been validated — any deviation will fail.**
-
-Deploy the dbt project as a Snowflake-native dbt project object, then execute
-it server-side. No local dbt installation required.
+**Execute commands in this step EXACTLY as written — any deviation will fail.**
 
 **6a. Deploy** (creates or updates the project object — always include EAI):
 
@@ -150,15 +128,7 @@ This builds in dependency order:
 EXECUTE DBT PROJECT RETAIL_SUPPLY_CHAIN_DB.AGENT.RETAIL_SUPPLY_CHAIN_DBT args=$$run-operation create_cortex_agent --args '{"agent_name": "RETAIL_OPS_AGENT", "database": "RETAIL_SUPPLY_CHAIN_DB", "schema": "AGENT", "stage_name": "AGENT_SPECS", "agent_spec_file": "rebalancing_agent_with_skills.yml", "next_version": "1.0.0"}'$$;
 ```
 
-Do NOT rewrite this SQL. Do NOT split it into multiple statements. Do NOT
-substitute the args format with JSON arrays or alternative quoting.
-Execute it exactly as shown above via `snowflake_sql_execute`.
-
-If the deploy fails with a network error, verify the EAI exists and has been
-granted to your role (see `setup_prerequisites.sql`).
-
-If a semantic view fails with a column error, the most likely cause is that
-the source table was not reseeded after a schema change — re-run Step 4.
+Execute this SQL verbatim via `snowflake_sql_execute`. Do not modify or split it.
 
 **⚠️ STOP**: Report dbt execution results (PASS/ERROR counts) and agent
 creation status before proceeding to verification.
@@ -217,14 +187,52 @@ CALL EXECUTE_AI_EVALUATION(
 **⚠️ STOP**: Ask whether the user wants to start the evaluation run now or
 just deploy the dataset and config for later use.
 
+### Step 9 (Optional): Teardown — Remove All Project Resources
+
+Ask the user if they want to tear down the project and remove all created
+resources. **This is destructive and irreversible.** If they decline, skip.
+
+**9a. Confirm teardown:**
+
+```
+⚠️  This will permanently delete ALL objects created by this project:
+  agent, dbt project, semantic views, eval dataset, stages, tables,
+  schemas, database (RETAIL_SUPPLY_CHAIN_DB), warehouse, and integrations.
+
+Proceed with full teardown? (yes/no)
+```
+
+**9b. Execute teardown:**
+
+Read `teardown.sql` and execute each statement via `snowflake_sql_execute`
+in order.
+
+- **Sections 1–9** (agent, dbt project, semantic views, stages, procedures,
+  tables, schemas, database) — run under the deployment role. No elevated
+  privileges required.
+- **Section 10** (warehouse, notification integration, external access
+  integration, network rule, `SHARED_OBJECTS` database) — **requires
+  ACCOUNTADMIN**. These statements are commented out by default. Present them
+  to the user and instruct them to run as ACCOUNTADMIN in a Snowflake
+  worksheet. Skip if the objects are shared with other projects.
+- **Section 11** (database role revocations) — commented out by default. Only
+  present to the user if they explicitly want to revoke `CORTEX_AGENT_USER`
+  and `PYPI_REPOSITORY_USER` grants.
+
+**9c. Report summary:**
+
+Execute the final SELECT (Section 11 summary report) and display the results
+to confirm what was removed.
+
 ## Scope Matrix
 
-| Step | Full | Update | Data only |
-|------|------|--------|-----------|
-| 3 — Infrastructure | yes | no | no |
-| 4 — Seed data | yes | no | yes |
-| 5 — Upload to stage | yes | yes | no |
-| 6 — dbt deploy + run | yes | yes | yes |
+| Step | Full | Update | Data only | Teardown |
+|------|------|--------|-----------|----------|
+| 3 — Infrastructure | yes | no | no | — |
+| 4 — Seed data | yes | no | yes | — |
+| 5 — Upload to stage | yes | yes | no | — |
+| 6 — dbt deploy + run | yes | yes | yes | — |
+| 9 — Teardown | no | no | no | yes |
 
 ## Error Reference
 

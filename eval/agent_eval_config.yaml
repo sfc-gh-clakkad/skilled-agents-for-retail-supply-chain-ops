@@ -7,7 +7,7 @@ evaluation:
     agent_type: "CORTEX AGENT"
   source_metadata:
     type: "dataset"
-    dataset_name: "RETAIL_OPS_AGENT_EVAL_DATASET"
+    dataset_name: "RETAIL_SUPPLY_CHAIN_DB.AGENT.RETAIL_OPS_AGENT_EVAL_DATASET"
 
 metrics:
   - "tool_execution_accuracy"

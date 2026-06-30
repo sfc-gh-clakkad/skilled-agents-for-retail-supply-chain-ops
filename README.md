@@ -64,7 +64,8 @@ graph TD
 │       ├── SKILL.md                      # Deployment orchestration (for Cortex Code)
 │       ├── setup_prerequisites.sql       # ACCOUNTADMIN one-time setup
 │       ├── project_scaffolding_deploy.sql# DB, schemas, tables, stages, UDFs
-│       └── seed_source_data.sql          # Synthetic data seeding
+│       ├── seed_source_data.sql          # Synthetic data seeding
+│       └── teardown.sql                  # Remove all project resources
 ├── eval/
 │   ├── agent_eval_config.yaml            # Evaluation config (metrics + custom rubrics)
 │   └── deploy_eval_dataset.sql           # Creates + populates the eval dataset table
@@ -134,6 +135,7 @@ The skill supports three deployment scopes:
 | **Full** | Infrastructure + data + agent (all steps) | First-time setup or full rebuild |
 | **Update** | Agent spec + skills + models only | After editing agent YAML or skill files |
 | **Data** | Reseed source tables + rebuild models | After modifying seed data |
+| **Teardown** | Remove all project resources | Done with the demo, want a clean slate |
 
 ### Incremental Updates
 
@@ -142,6 +144,29 @@ After the initial deployment, use Cortex Code for targeted updates:
 - **Changed agent behavior?** — "Redeploy the retail supply chain agent" (Update scope)
 - **Modified skills?** — "Update the retail supply chain skills" (Update scope)
 - **Changed source data?** — "Reseed the retail supply chain data" (Data scope)
+
+### Teardown (Remove All Resources)
+
+To completely remove all Snowflake objects created by this project, use Cortex Code:
+
+> **"Tear down the retail supply chain project"**
+
+Or select **Teardown** when prompted for deployment scope. This removes:
+
+- Cortex Agent, dbt project object, and semantic views
+- All tables, stages, UDFs, and stored procedures
+- The database (`RETAIL_SUPPLY_CHAIN_DB`) and all schemas
+- Account-level objects (warehouse, integrations) — **requires ACCOUNTADMIN**
+
+You can also run the teardown script directly:
+
+```bash
+snow sql -f deploy/skills/deploy-retail-supply-chain/teardown.sql
+```
+
+> **Note on privileges:** Sections 1–9 of the teardown script run under your deployment role and drop all project-specific objects. Section 10 (warehouse, notification integration, external access integration, network rule, and the `SHARED_OBJECTS` database) **requires ACCOUNTADMIN** and is commented out by default. Uncomment and run those statements separately as ACCOUNTADMIN if you want a full cleanup. Skip them if other projects share those objects.
+
+> **Warning:** Teardown is destructive and irreversible. All data will be lost. The script prints a summary report of removed objects at the end.
 
 ### Verification
 

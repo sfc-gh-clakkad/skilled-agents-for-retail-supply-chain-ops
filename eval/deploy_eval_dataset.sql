@@ -9,7 +9,7 @@
 --   1. The evaluation dataset table with correct column types
 --   2. Inserts test cases with PARSE_JSON ground truth (1 simple, 1 moderate,
 --      1 complex per skill type)
---   3. Verifies the dataset with a summary query
+--   3. Registers the table as an evaluation dataset via SYSTEM$CREATE_EVALUATION_DATASET
 --
 -- Execution:
 --   snow sql -f eval/deploy_eval_dataset.sql
@@ -34,7 +34,7 @@ CREATE OR REPLACE TABLE RETAIL_SUPPLY_CHAIN_DB.AGENT.RETAIL_OPS_AGENT_EVAL_DATAS
 
 -- #############################################################################
 -- SECTION 2: Insert Evaluation Data
--- 7 rows: 1 simple + 1 moderate + 1 complex per skill, plus 1 cross-domain
+-- 6 rows: 2 general_query, 2 stockout_risk, 2 returns_rebalancing
 -- #############################################################################
 
 -- --------------------------------------------------------------------------
@@ -189,49 +189,17 @@ SELECT
     'complex',
     6;
 
--- --------------------------------------------------------------------------
--- 7: cross_domain / complex — both skills
--- --------------------------------------------------------------------------
--- INSERT INTO RETAIL_SUPPLY_CHAIN_DB.AGENT.RETAIL_OPS_AGENT_EVAL_DATASET
---     (input_query, ground_truth, track, category, difficulty, eval_id)
--- SELECT
---     'I need a complete inventory action plan: which items to reorder urgently AND which returns to rebalance',
---     PARSE_JSON('{
---         "ground_truth_output": "A unified action plan covering both reorder prioritization (ranked by P(stockout) and expected cost) and return disposition recommendations (restock/transfer/liquidate). Uses code_execution for probability calculation and addresses both domains.",
---         "expected_skill": "stockout_risk_prioritization+returns_rebalancing",
---         "skill_indicators": [
---             "Identifies at-risk SKUs by reorder point ratio filter",
---             "Computes net margin from COGS, selling_price, and return_rate",
---             "Derives demand statistics and carrying cost from order history",
---             "Uses code_execution to call stockout_risk.compute_stockout_risk() and rank by expected cost",
---             "Presents ranked replenishment table with action classification",
---             "Analyzes return inflow by SKU and location with item condition",
---             "Assesses inventory levels and classifies stock position across locations",
---             "Matches returned SKUs against demand signals at candidate destinations",
---             "Calculates transfer economics (net_benefit) for viable routes",
---             "Applies disposition logic and presents recommendation table"
---         ],
---         "ground_truth_invocations": [
---             {"tool_name": "query_inventory", "tool_input": "Get current stock levels, reorder points, and demand signals"},
---             {"tool_name": "query_orders", "tool_input": "Retrieve demand history and open orders for stockout calculation"},
---             {"tool_name": "query_returns", "tool_input": "Get pending returns with condition data for disposition"},
---             {"tool_name": "query_finance", "tool_input": "Get margins and cost data for economic ranking"},
---             {"tool_name": "code_execution", "tool_input": "Calculate P(stockout) for reorder ranking and disposition cost-benefit for returns, produce combined action plan"}
---         ]
---     }'),
---     'tea',
---     'cross_domain',
---     'complex',
---     7;
-
 -- #############################################################################
--- SECTION 3: Verify the dataset
+-- SECTION 3: Register as evaluation dataset
+-- This creates the internal version that EXECUTE_AI_EVALUATION expects.
 -- #############################################################################
 
--- SELECT
---     eval_id,
---     category,
---     difficulty,
---     ground_truth:"expected_skill"::VARCHAR AS expected_skill
--- FROM RETAIL_SUPPLY_CHAIN_DB.AGENT.RETAIL_OPS_AGENT_EVAL_DATASET
--- ORDER BY eval_id;
+CALL SYSTEM$CREATE_EVALUATION_DATASET(
+  'Cortex Agent',
+  'RETAIL_SUPPLY_CHAIN_DB.AGENT.RETAIL_OPS_AGENT_EVAL_DATASET',
+  'RETAIL_SUPPLY_CHAIN_DB.AGENT.RETAIL_OPS_AGENT_EVAL_DATASET',
+  OBJECT_CONSTRUCT(
+    'query_text', 'INPUT_QUERY',
+    'expected_tools', 'GROUND_TRUTH'
+  )
+);

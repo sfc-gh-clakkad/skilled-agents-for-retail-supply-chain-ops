@@ -230,3 +230,5 @@ retail_supply_chain_dbt/.user.yml
 .cortex/
 .snowflake/
 .archive/
+
+.scratchpad
