@@ -1,10 +1,11 @@
 # Skilled Agents for Retail Supply Chain
 
-An AI-powered retail supply chain assistant built on [Snowflake Cortex Agents](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agent). The agent helps area managers and store managers make inventory decisions using text-to-SQL, code execution, and structured skills.
+This project builds an AI-powered retail supply chain co-worker built on [Snowflake Cortex Agents](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agent) and Snowflake Co-Work. It demonstrates how to extend a Cortex Agent beyond basic Q&A into a system that automates real-world inventory management workflows. The agent answers natural language questions about inventory, orders, returns, and finance across a multi-location retail network — and uses two specialized skills to orchestrate multi-step analytical workflows that go beyond simple data lookups.
 
-## Overview
+The agent that powers CoWork automates not just the process of getting insights from retail supply chain data, but executes business processes as laid out through skills on a human operational manager's commands.
 
-This project demonstrates how to extend a Cortex Agent beyond basic Q&A into a system that automates real-world inventory management workflows. The agent answers natural language questions about inventory, orders, returns, and finance across a multi-location retail network — and uses two specialized skills to orchestrate multi-step analytical workflows that go beyond simple data lookups.
+With such skilled co-workers, area managers and store managers for retailers that make inventory decisions on a daily basis can use a single pane of glass to understand their inventory state and trigger actions across locations.
+
 
 ### What you'll build
 
@@ -63,7 +64,7 @@ graph TD
 │   └── skills/deploy-retail-supply-chain/
 │       ├── SKILL.md                      # Deployment orchestration (for Cortex Code)
 │       ├── setup_prerequisites.sql       # ACCOUNTADMIN one-time setup
-│       ├── project_scaffolding_deploy.sql# DB, schemas, tables, stages, UDFs
+│       ├── project_scaffolding_deploy.sql # DB, schemas, tables, stages, UDFs
 │       ├── seed_source_data.sql          # Synthetic data seeding
 │       └── teardown.sql                  # Remove all project resources
 ├── eval/
@@ -74,15 +75,26 @@ graph TD
     ├── packages.yml
     ├── profiles.yml
     ├── cortex_agents/
-    │   ├── rebalancing_agent_with_skills.yml  # Agent specification
-    │   └── skills/                            # Skill definitions
+    │   ├── rebalancing_agent_with_skills.yml   # Agent spec (with skills)
+    │   ├── rebalancing_agent_no_skills.yml     # Agent spec (baseline, no skills)
+    │   └── skills/
+    │       ├── returns_rebalancing/
+    │       │   └── SKILL.md                    # 7-step returns disposition workflow
+    │       └── stockout_risk_prioritization/
+    │           ├── SKILL.md                    # Margin-aware stockout risk workflow
+    │           └── stockout_risk.py            # Python scipy-based P(stockout) calc
     ├── macros/
-    │   ├── create_cortex_agent.sql            # dbt macro to CREATE AGENT
+    │   ├── create_cortex_agent.sql            # dbt macro to CREATE/ALTER AGENT
     │   └── generate_schema_name.sql
     └── models/
-        ├── sources.yml
-        ├── orders/                            # Transformation models
-        └── semantic_views/                    # 3 semantic views
+        ├── sources.yml                        # Source definitions (3 schemas, 9 tables)
+        ├── orders/
+        │   ├── schema.yml
+        │   └── daily_return_rates_by_sku_channel.sql
+        └── semantic_views/
+            ├── inventory_sv.sql               # Stock levels, products, locations
+            ├── orders_sv.sql                  # Orders, returns, demand forecasts
+            └── finance_sv.sql                 # Costs, margins, shipping
 ```
 
 ## Getting Started
@@ -213,7 +225,7 @@ SELECT SNOWFLAKE.CORTEX.INVOKE_AGENT(
 
 ## Evaluation
 
-The `eval/` directory contains the evaluation dataset with a small representative subset of test scenarios for evaluating Agent's tool invocation accuracy using the TEA track of metrics, and it's skill activation accuracy using a custom metric that it configures through the `eval/agent_eval_config.yaml` file.
+The `eval/` directory contains the evaluation dataset with a small representative subset of test scenarios for evaluating the agent's tool invocation accuracy using the TEA track of metrics, and its skill activation accuracy using a custom metric configured through the `eval/agent_eval_config.yaml` file.
 
 This dataset is created for use with Snowflake's out-of-the-box implementation of a [GPA-framework for Cortex Agent evaluation](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents-evaluations).
 
