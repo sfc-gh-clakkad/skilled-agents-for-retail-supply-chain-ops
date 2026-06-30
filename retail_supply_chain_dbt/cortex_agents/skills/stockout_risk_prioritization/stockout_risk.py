@@ -37,7 +37,43 @@ _ACTION_RULES = [
 ]
 
 
-def _classify_action(p_stockout: float, expected_cost: float) -> str:
+def compute_stockout_probability(
+    available_stock: float,
+    daily_demand_mean: float,
+    daily_demand_std: float,
+    lead_time_days: float,
+) -> float:
+    """Return P(stockout) during lead time using a normal-distribution model."""
+    lt_demand_mean = daily_demand_mean * lead_time_days
+    lt_demand_std = daily_demand_std * np.sqrt(lead_time_days)
+
+    if lt_demand_std > 0:
+        return 1 - stats.norm.cdf(available_stock, loc=lt_demand_mean, scale=lt_demand_std)
+    return 1.0 if lt_demand_mean > available_stock else 0.0
+
+
+def compute_expected_cost(
+    p_stockout: float,
+    net_margin: float,
+    committed_demand: float,
+    available_stock: float,
+    daily_demand_mean: float,
+    lead_time_days: float,
+    carrying_cost_per_unit_per_day: float,
+) -> float:
+    """Return expected cost of stockout: (P(stockout) x lost margin) - avoided carrying cost."""
+    lost_revenue = net_margin * committed_demand
+    days_until_so = available_stock / max(daily_demand_mean, 0.01)
+    avoided_carrying = (
+        carrying_cost_per_unit_per_day
+        * available_stock
+        * max(0.0, lead_time_days - days_until_so)
+    )
+    return (p_stockout * lost_revenue) - avoided_carrying
+
+
+def classify_action(p_stockout: float, expected_cost: float) -> str:
+    """Classify replenishment urgency based on stockout probability and expected cost."""
     for label, condition in _ACTION_RULES:
         if condition(p_stockout, expected_cost):
             return label
@@ -90,27 +126,22 @@ def compute_stockout_risk(sku_data: pd.DataFrame) -> pd.DataFrame:
 
     results = []
     for _, row in sku_data.iterrows():
-        # Lead-time demand distribution (normal approximation)
-        lt_demand_mean = row["daily_demand_mean"] * row["lead_time_days"]
-        lt_demand_std  = row["daily_demand_std"] * np.sqrt(row["lead_time_days"])
-
-        if lt_demand_std > 0:
-            p_stockout = 1 - stats.norm.cdf(
-                row["available_stock"], loc=lt_demand_mean, scale=lt_demand_std
-            )
-        else:
-            # Deterministic demand — stockout is certain or impossible
-            p_stockout = 1.0 if lt_demand_mean > row["available_stock"] else 0.0
-
-        # Expected cost = (P(stockout) × lost margin) − avoided carrying cost
-        lost_revenue     = row["net_margin"] * row["committed_demand"]
-        days_until_so    = row["available_stock"] / max(row["daily_demand_mean"], 0.01)
-        avoided_carrying = (
-            row["carrying_cost_per_unit_per_day"]
-            * row["available_stock"]
-            * max(0.0, row["lead_time_days"] - days_until_so)
+        p_stockout = compute_stockout_probability(
+            available_stock=row["available_stock"],
+            daily_demand_mean=row["daily_demand_mean"],
+            daily_demand_std=row["daily_demand_std"],
+            lead_time_days=row["lead_time_days"],
         )
-        expected_cost = (p_stockout * lost_revenue) - avoided_carrying
+
+        expected_cost = compute_expected_cost(
+            p_stockout=p_stockout,
+            net_margin=row["net_margin"],
+            committed_demand=row["committed_demand"],
+            available_stock=row["available_stock"],
+            daily_demand_mean=row["daily_demand_mean"],
+            lead_time_days=row["lead_time_days"],
+            carrying_cost_per_unit_per_day=row["carrying_cost_per_unit_per_day"],
+        )
 
         results.append({
             "sku":                       row["sku"],
@@ -122,7 +153,7 @@ def compute_stockout_risk(sku_data: pd.DataFrame) -> pd.DataFrame:
             "expected_cost_of_stockout": round(expected_cost, 2),
             "committed_demand":          row["committed_demand"],
             "net_margin":                round(row["net_margin"], 2),
-            "action":                    _classify_action(p_stockout, expected_cost),
+            "action":                    classify_action(p_stockout, expected_cost),
         })
 
     priority_df = (

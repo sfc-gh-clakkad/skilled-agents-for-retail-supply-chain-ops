@@ -15,6 +15,12 @@ All SQL executes via `snowflake_sql_execute` (CoCo's built-in Snowflake tool).
 PUT commands via Bash (client-side). dbt runs server-side via `snow dbt deploy`
 and `snow dbt execute`.
 
+**SQL execution rule**: When running statements from a `.sql` file, batch
+multiple independent statements into a single `snowflake_sql_execute` call
+(semicolon-separated) rather than executing one at a time. Only execute
+individually when a later statement depends on the result of an earlier one
+(e.g., CREATE SCHEMA before CREATE TABLE in that schema).
+
 The working directory for Bash commands is the **project root**
 (`agentic-inventory-management/`).
 
@@ -171,6 +177,45 @@ A successful deployment shows:
 - `INVENTORY_SV`, `ORDERS_SV`, `FINANCE_SV` in the semantic views list
 
 Report the output and call the deployment complete.
+
+### Step 8 (Optional): Deploy Evaluation Framework
+
+Ask the user if they want to deploy the agent evaluation dataset and custom metric config.
+If they decline, skip to Output.
+
+**8a. Create evaluation dataset table and insert test cases:**
+
+Read `eval/deploy_eval_dataset.sql` and execute each statement via
+`snowflake_sql_execute` in order. The script creates the table
+`RETAIL_SUPPLY_CHAIN_DB.AGENT.RETAIL_OPS_AGENT_EVAL_DATASET` and inserts 7
+test cases covering stockout risk, returns rebalancing, cross-domain, and
+general queries.
+
+**8b. Create stage and upload eval config:**
+
+```sql
+CREATE STAGE IF NOT EXISTS RETAIL_SUPPLY_CHAIN_DB.AGENT.EVAL_STAGE
+  FILE_FORMAT = (TYPE = 'CSV' FIELD_DELIMITER = NONE RECORD_DELIMITER = '\n'
+                 SKIP_HEADER = 0 FIELD_OPTIONALLY_ENCLOSED_BY = NONE
+                 ESCAPE_UNENCLOSED_FIELD = NONE);
+```
+
+```bash
+snow sql --query "PUT file://./eval/agent_eval_config.yaml @RETAIL_SUPPLY_CHAIN_DB.AGENT.EVAL_STAGE/ AUTO_COMPRESS=FALSE OVERWRITE=TRUE;"
+```
+
+**8c. Run the evaluation (optional):**
+
+```sql
+CALL EXECUTE_AI_EVALUATION(
+  'START',
+  OBJECT_CONSTRUCT('run_name', 'baseline-v1'),
+  '@RETAIL_SUPPLY_CHAIN_DB.AGENT.EVAL_STAGE/agent_eval_config.yaml'
+);
+```
+
+**⚠️ STOP**: Ask whether the user wants to start the evaluation run now or
+just deploy the dataset and config for later use.
 
 ## Scope Matrix
 

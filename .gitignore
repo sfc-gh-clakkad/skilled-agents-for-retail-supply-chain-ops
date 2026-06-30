@@ -221,7 +221,12 @@ __marimo__/
 ./retail_supply_chain_dbt/target/
 ./retail_supply_chain_dbt/logs/
 ./retail_supply_chain_dbt/dbt_packages/
-retail_supply_chain_dbt/.user.ymlß
+retail_supply_chain_dbt/.user.yml
+./retail_supply_chain_dbt/cortex_agents/rebalancing_agent_no_skills.yml
 
 .DS_Store
 retail_supply_chain_dbt/.user.yml
+
+.cortex/
+.snowflake/
+.archive/

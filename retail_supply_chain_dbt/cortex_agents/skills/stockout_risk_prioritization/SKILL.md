@@ -1,106 +1,102 @@
 ---
 name: stockout-risk-prioritization
 description: >
-  Use for ALL requests involving stockout risk, replenishment prioritization,
-  reorder decisions, or "which SKUs should I reorder." Calculates probability
-  of stockout during lead time using statistical models, scores by expected cost
-  (lost margin × committed demand), and produces a margin-weighted priority list.
-  DO NOT handle replenishment/reorder questions without this skill.
-  Triggers: stockout risk, reorder priority, replenishment list, which SKUs to reorder,
-  probability of stockout, risk-ranked inventory, reorder point analysis,
-  margin-weighted replenishment, expected cost of stockout, service level optimization.
+  Use for requests requiring a PRIORITIZED replenishment list combining
+  stockout probability, expected cost, AND action classification to rank SKUs.
+  DO NOT run the full workflow for isolated metric queries — call functions directly.
+  Triggers: reorder priority, replenishment list, which SKUs to reorder,
+  risk-ranked inventory, margin-weighted replenishment, prioritize reorders,
+  ranked replenishment, reorder decision list.
 ---
 
 # Margin-Aware Stockout Risk Prioritization
 
-Do NOT use for: returns-driven rebalancing (use `returns_rebalancing`), simple stock level queries, or financial lookups without a replenishment context.
+Do NOT use for: returns-driven rebalancing (`returns_rebalancing`), simple stock level queries, or financial lookups without replenishment context.
 
-## Workflow
+## When NOT to Run the Full Workflow
 
-### Step 1: Identify SKUs Approaching Reorder Point
+For single-SKU or non-ranking queries, call functions from `stockout_risk.py` directly via `code_execution`. Gather only the inputs needed for that SKU from `query_inventory`, `query_orders`, `query_finance`.
 
-Use `query_inventory` to pull: SKU, location_id, location_name, quantity_on_hand, quantity_reserved, reorder_point, lead_time_days.
+| User intent | Function |
+|-------------|----------|
+| P(stockout) for a SKU | `compute_stockout_probability(available_stock, daily_demand_mean, daily_demand_std, lead_time_days)` |
+| Cost exposure for a SKU | `compute_expected_cost(p_stockout, net_margin, committed_demand, available_stock, daily_demand_mean, lead_time_days, carrying_cost_per_unit_per_day)` |
+| Should I reorder this SKU? | `classify_action(p_stockout, expected_cost)` |
 
-Filter to rows where `(quantity_on_hand - quantity_reserved) / reorder_point <= 1.5`.
+- "Stockout risk across my warehouse" without ranking → compute probabilities, present as list. Do NOT classify or rank.
 
-**⚠️ STOP if results > 20**: Ask user to narrow scope by category, location, or region before continuing.
+## Full Prioritization Workflow
 
-### Step 2: Score by Margin
+Run ONLY when the user wants a ranked replenishment list.
 
-Use `query_finance` for COGS and selling_price per SKU/channel. Use `query_orders` for return_rate per SKU.
+### Step 1: Identify At-Risk SKUs
+
+`query_inventory` → SKU, location_id, location_name, quantity_on_hand, quantity_reserved, reorder_point, lead_time_days.
+
+Filter: `(quantity_on_hand - quantity_reserved) / reorder_point <= 1.5`
+
+**⚠️ STOP if results > 20**: Ask user to narrow scope.
+
+### Step 2: Compute Net Margin
+
+`query_finance` → COGS, selling_price. `query_orders` → return_rate.
 
 ```
-gross_margin = selling_price - COGS
-net_margin   = gross_margin * (1 - return_rate)
+net_margin = (selling_price - COGS) * (1 - return_rate)
 ```
 
-### Step 3: Check Committed and Forecasted Demand
+### Step 3: Committed Demand
 
-Use `query_orders` for open orders + demand forecast (confidence ≥ 0.6, next 30 days) per at-risk SKU-location.
+`query_orders` → open orders + demand forecast (confidence ≥ 0.6, next 30 days).
 
 ```
 committed_demand = open_order_quantity + forecasted_demand
 ```
 
-### Step 4: Gather Lead Time Inputs
+### Step 4: Demand Statistics & Carrying Cost
 
-Use `query_inventory` to retrieve `lead_time_days` per SKU — this field is available in the `INVENTORY_SV` semantic view from the `PRODUCTS` table. Use `query_orders` for daily order quantities over the last 90 days to derive `daily_demand_mean` and `daily_demand_std`.
+- `query_inventory` → `lead_time_days` (from `INVENTORY_SV` / `PRODUCTS` table)
+- `query_orders` → daily order quantities (last 90 days) → derive `daily_demand_mean`, `daily_demand_std`
+- `carrying_cost_per_unit_per_day = COGS * 0.25 / 365` (default when not available from `query_finance`)
 
-Compute: `carrying_cost_per_unit_per_day = COGS * 0.25 / 365` (use this default when a carrying cost rate is not explicitly available from `query_finance`).
+### Step 5: Compute & Rank — CODE EXECUTION
 
-### Step 5: Compute P(Stockout) and Rank — CODE EXECUTION
-
-Assemble a DataFrame `sku_data` (one row per at-risk SKU-location) from Steps 1-4:
+Assemble DataFrame `sku_data` (one row per at-risk SKU-location):
 
 | Column | Source |
 |--------|--------|
-| sku | Step 1 |
-| location | Step 1 |
-| available_stock | Step 1: `quantity_on_hand - quantity_reserved` |
+| sku, location, available_stock | Step 1 |
 | lead_time_days | Step 1 / Step 4 |
-| daily_demand_mean | Step 4 |
-| daily_demand_std | Step 4 |
+| daily_demand_mean, daily_demand_std | Step 4 |
 | net_margin | Step 2 |
 | committed_demand | Step 3 |
 | carrying_cost_per_unit_per_day | Step 4 |
 
-Use `code_execution` to run the canonical `stockout_risk.py` script in this skill folder. You MUST use this script. Do NOT write new probability calculation code — the validated implementation already exists.
-
 ```python
 import stockout_risk
 
-priority_df = compute_stockout_risk(sku_data)
-print_summary(priority_df)
+priority_df = stockout_risk.compute_stockout_risk(sku_data)
+stockout_risk.print_summary(priority_df)
 ```
 
-If the script fails to load, STOP and report the error. Do NOT fall back to writing your own implementation.
+Do NOT write custom calculation code. If the script fails, STOP and report the error.
 
-### Step 6: Present Prioritized Replenishment List
+### Step 6: Present Results
 
-Present as a ranked table:
+**⚠️ MANDATORY STOP**: Present ranked table and summary. Ask area managers whether to proceed with reorders for URGENT items.
 
-| Rank | SKU | Location | P(Stockout) | Expected Cost | Net Margin | Committed Demand | Action |
-|------|-----|----------|-------------|---------------|------------|------------------|--------|
-| 1 | SKU-E001 | LOC-001 | 87.3% | $4,280 | $12.50 | 342 units | URGENT REORDER |
-| 2 | SKU-A003 | LOC-002 | 64.1% | $2,150 | $8.75 | 245 units | REORDER |
-| 3 | SKU-H002 | LOC-003 | 41.8% | $890 | $15.20 | 58 units | MONITOR |
-
-Classification:
+Action thresholds (for reference — computed by the script):
 - **URGENT REORDER**: P(stockout) > 70% OR expected_cost > $3,000
 - **REORDER**: P(stockout) > 40% OR expected_cost > $1,000
 - **MONITOR**: P(stockout) > 20%
 - **OK**: P(stockout) ≤ 20%
 
-Include summary: total at-risk SKUs, total cost exposure, average service level.
-
-**⚠️ MANDATORY STOP**: Present the full list. Ask area managers whether to proceed with reorders for URGENT items. Store managers receive results only.
-
 ## Constraints
 
-- If demand history < 30 days, note the caveat and continue with available data
-- If lead_time_days is missing for a SKU, use the category average and note the assumption
-- P(stockout) assumes normally distributed demand — state this assumption in the output
+- Demand history < 30 days → note caveat, continue with available data
+- Missing lead_time_days → use category average, note assumption
+- State in output: P(stockout) assumes normally distributed demand
 
 ## Output
 
-Ranked replenishment table with P(stockout), expected cost of stockout, and action classification per SKU-location, plus summary statistics (total SKUs at risk, total cost exposure, average service level).
+Ranked replenishment table with P(stockout), expected cost, action per SKU-location. Summary: total at-risk SKUs, total cost exposure, average service level.

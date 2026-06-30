@@ -20,26 +20,40 @@ This project demonstrates how to extend a Cortex Agent beyond basic Q&A into a s
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                   Cortex Agent                           │
-│               RETAIL_OPS_AGENT                          │
-├──────────┬──────────┬──────────┬────────────────────────┤
-│ Text-to- │  Code    │  Chart   │  Disposition           │
-│   SQL    │Execution │ Renderer │  Action (email)        │
-├──────────┴──────────┴──────────┴────────────────────────┤
-│  Skills                                                  │
-│  ├── returns_rebalancing (7-step workflow)               │
-│  └── stockout_risk_prioritization (scipy-based calc)     │
-├─────────────────────────────────────────────────────────┤
-│  Semantic Views (Cortex Analyst)                         │
-│  ├── INVENTORY_SV   — stock levels, products, locations  │
-│  ├── ORDERS_SV      — orders, returns, demand forecasts  │
-│  └── FINANCE_SV     — margins, COGS, shipping costs      │
-├─────────────────────────────────────────────────────────┤
-│  Source Tables (synthetic data)                           │
-│  INVENTORY schema │ ORDERS schema │ FINANCE schema       │
-└─────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph Agent["RETAIL_OPS_AGENT (Cortex Agent)"]
+        direction LR
+        T2SQL[Text-to-SQL]
+        CODE[Code Execution]
+        CHART[Chart Renderer]
+        ACTION[Disposition Action]
+    end
+
+    subgraph Skills
+        S1["returns_rebalancing<br/><i>7-step workflow</i>"]
+        S2["stockout_risk_prioritization<br/><i>scipy-based calc</i>"]
+    end
+
+    subgraph SV["Semantic Views (Cortex Analyst)"]
+        INV[INVENTORY_SV<br/>stock levels · products · locations]
+        ORD[ORDERS_SV<br/>orders · returns · demand forecasts]
+        FIN[FINANCE_SV<br/>margins · COGS · shipping costs]
+    end
+
+    subgraph Data["Source Tables (synthetic data)"]
+        direction LR
+        D1[INVENTORY schema]
+        D2[ORDERS schema]
+        D3[FINANCE schema]
+    end
+
+    Agent --> Skills
+    Agent --> SV
+    SV --> Data
+
+    classDef highlight fill:#1a73e8,stroke:#0d47a1,stroke-width:3px,color:#fff
+    class CODE,S1,S2 highlight
 ```
 
 ## Repository Structure
@@ -52,8 +66,8 @@ This project demonstrates how to extend a Cortex Agent beyond basic Q&A into a s
 │       ├── project_scaffolding_deploy.sql# DB, schemas, tables, stages, UDFs
 │       └── seed_source_data.sql          # Synthetic data seeding
 ├── eval/
-│   ├── agent_eval_dataset.json           # 18 golden evaluation test cases
-│   └── run_eval.py                       # Evaluation runner script
+│   ├── agent_eval_config.yaml            # Evaluation config (metrics + custom rubrics)
+│   └── deploy_eval_dataset.sql           # Creates + populates the eval dataset table
 └── retail_supply_chain_dbt/
     ├── dbt_project.yml
     ├── packages.yml
@@ -73,6 +87,8 @@ This project demonstrates how to extend a Cortex Agent beyond basic Q&A into a s
 ## Getting Started
 
 This project is designed to be deployed using [Cortex Code](https://docs.snowflake.com/en/user-guide/cortex-code/cortex-code) — Snowflake's AI-powered IDE. A deployment skill automates the entire setup end-to-end, handling infrastructure creation, data seeding, dbt deployment, and agent creation interactively.
+
+> **Note:** The data model, reasoning steps in the skill, and calculations used throughout this project are illustrative of their real-life counterparts but may not exactly match any particular process. All of these pieces — the data schema, agent logic, and analytical formulas — can be adjusted when adopting this for your own workflows.
 
 ### Prerequisites
 
@@ -138,6 +154,20 @@ SHOW SEMANTIC VIEWS IN SCHEMA RETAIL_SUPPLY_CHAIN_DB.AGENT;
 
 Expected output: `RETAIL_OPS_AGENT` and three semantic views (`INVENTORY_SV`, `ORDERS_SV`, `FINANCE_SV`).
 
+### Step 3 (Optional): Evaluate the Agent
+
+Once deployed, you can run the built-in evaluation to measure agent quality. The evaluation dataset is deployed as part of the full deploy (via `eval/deploy_eval_dataset.sql`). To trigger an evaluation run:
+
+```sql
+CALL EXECUTE_AI_EVALUATION(
+  'START',
+  OBJECT_CONSTRUCT('run_name', 'baseline-v1'),
+  '@RETAIL_SUPPLY_CHAIN_DB.AGENT.EVAL_STAGE/agent_eval_config.yaml'
+);
+```
+
+This executes all test cases against the deployed agent and scores them on tool execution accuracy, logical consistency, and skill indicator coverage. See the [Evaluation](#evaluation) section below for more details.
+
 ## Using the Agent
 
 Once deployed, interact with the agent via Snowflake Intelligence or the API:
@@ -158,30 +188,53 @@ SELECT SNOWFLAKE.CORTEX.INVOKE_AGENT(
 
 ## Evaluation
 
-The `eval/` directory contains an evaluation framework with 18 golden test cases that measure agent efficacy with and without skills. Run it directly from Cortex Code.
+The `eval/` directory contains the evaluation dataset with a small representative subset of test scenarios for evaluating Agent's tool invocation accuracy using the TEA track of metrics, and it's skill activation accuracy using a custom metric that it configures through the `eval/agent_eval_config.yaml` file.
 
-In the Cortex Code chat panel:
+This dataset is created for use with Snowflake's out-of-the-box implementation of a [GPA-framework for Cortex Agent evaluation](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents-evaluations).
 
-> **"Run the agent evaluation"**
+Snowflake-native evaluation framework that uses [`EXECUTE_AI_EVALUATION`](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agent#evaluating-agents) to trigger an evaluation run with the provided config.
 
-Cortex Code will:
-1. Install `snowflake-connector-python` if needed
-2. Validate the dataset structure (dry run)
-3. Execute all 18 test cases against the deployed agent in both modes (skills enabled vs. disabled)
-4. Output a summary report with pass rates, score deltas, and latency by category
-5. Save detailed results to `eval/results.json`
+### What's included
 
-You can also ask for specific evaluation tasks:
+| File | Purpose |
+|------|---------|
+| `eval/deploy_eval_dataset.sql` | Creates and populates the `RETAIL_OPS_AGENT_EVAL_DATASET` table with golden test cases |
+| `eval/agent_eval_config.yaml` | Evaluation configuration — defines metrics, agent target, and custom scoring rubrics |
 
-- **"Dry run the eval dataset"** — validates dataset structure without calling the agent
-- **"Run eval and show me the skill comparison"** — runs the eval and highlights the with-skills vs. without-skills delta
-- **"Run eval for stockout risk cases only"** — targets a specific category
+The dataset is deployed automatically as part of the full deployment. The config YAML is uploaded to `@RETAIL_SUPPLY_CHAIN_DB.AGENT.EVAL_STAGE`.
 
-The evaluation reports:
-- Overall pass rate and average score
-- Skill efficacy comparison (with vs. without skills)
-- Per-category breakdown (score + latency)
-- Detailed failure analysis with assertion-level diagnostics
+### Running an evaluation
+
+```sql
+CALL EXECUTE_AI_EVALUATION(
+  'START',
+  OBJECT_CONSTRUCT('run_name', 'baseline-v1'),
+  '@RETAIL_SUPPLY_CHAIN_DB.AGENT.EVAL_STAGE/agent_eval_config.yaml'
+);
+```
+
+Change the `run_name` value to label different runs (e.g., after modifying skills or the agent spec).
+
+You can also trigger the evaluation from Cortex Code. In the chat panel:
+
+> **"Run the agent evaluation with run name baseline-v1"**
+
+### Metrics
+
+The evaluation scores each test case on:
+
+- **tool_execution_accuracy** — Did the agent invoke the correct tools with appropriate inputs?
+- **logical_consistency** — Is the agent's reasoning coherent and grounded in the data?
+- **skill_indicator_coverage** (custom) — Did the agent follow the required reasoning steps defined in each test case's `skill_indicators` array?
+
+### Test case categories
+
+| Category | Description |
+|----------|-------------|
+| `general_query` | Basic lookups that require no skill activation |
+| `stockout_risk` | Queries that should trigger the stockout risk prioritization workflow |
+| `returns_rebalancing` | Queries that should trigger the returns disposition workflow |
+| `cross_domain` | Queries requiring both skills (reserved for future use) |
 
 ## Troubleshooting
 

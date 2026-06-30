@@ -1,0 +1,66 @@
+# Agent Evaluation Configuration
+# Target: RETAIL_SUPPLY_CHAIN_DB.AGENT.RETAIL_OPS_AGENT
+
+evaluation:
+  agent_params:
+    agent_name: "RETAIL_SUPPLY_CHAIN_DB.AGENT.RETAIL_OPS_AGENT"
+    agent_type: "CORTEX AGENT"
+  source_metadata:
+    type: "dataset"
+    dataset_name: "RETAIL_OPS_AGENT_EVAL_DATASET"
+
+metrics:
+  - "tool_execution_accuracy"
+  - "logical_consistency"
+
+  - name: "skill_indicator_coverage"
+    score_ranges:
+      min_score: [0, 3]
+      median_score: [4, 7]
+      max_score: [8, 10]
+    prompt: |
+      You are evaluating whether the RETAIL_OPS_AGENT agent correctly followed the required
+      reasoning steps (skill indicators) for a given query.
+
+      ## Instructions
+
+      The ground truth contains a JSON field "skill_indicators" — an array of
+      strings describing behaviors or steps the agent MUST exhibit in its response
+      or tool usage trace. Your job is to check whether EACH indicator is satisfied.
+
+      Order does NOT matter. Only presence matters.
+
+      For each indicator, determine:
+      - SATISFIED: The agent's output or tool trace clearly demonstrates this behavior.
+      - NOT SATISFIED: The agent's output or tool trace does not demonstrate this behavior,
+        or actively contradicts it (e.g., a negative indicator like "Does NOT run full
+        prioritization workflow" is violated if the agent ran the full workflow).
+
+      ## Scoring
+
+      Score = (number of SATISFIED indicators / total indicators) * 10, rounded to
+      the nearest integer.
+
+      - If "skill_indicators" is empty ([]), score 10 (no indicators to violate).
+      - If "skill_indicators" is missing from ground truth, score 10.
+
+      ## Inputs
+
+      Ground truth (contains skill_indicators array):
+      {{ground_truth}}
+
+      Agent output (final response streamed to user):
+      {{output}}
+
+      Agent tool usage trace (tools invoked, inputs, outputs):
+      {{tool_info}}
+
+      ## Response format
+
+      Respond with ONLY a JSON object (no markdown, no explanation outside the JSON):
+      {
+        "indicators": [
+          {"indicator": "<text>", "satisfied": true/false, "evidence": "<brief reason>"}
+        ],
+        "score": <integer 0-10>
+      }

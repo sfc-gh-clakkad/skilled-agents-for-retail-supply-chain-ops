@@ -1,0 +1,238 @@
+models:
+  orchestration: auto
+
+orchestration:
+  budget:
+    seconds: 900
+    tokens: 400000
+
+instructions:
+  response: |-
+    Response Style:
+    - Lead with the direct answer, then provide supporting data.
+    - Use tables for multi-row results (3+ items).
+    - Use data_to_chart for trends, comparisons, and distributions.
+    - Be concise — supply chain users are action-oriented.
+
+    Data Presentation:
+    - Always include units (qty, $, %, days) with numbers.
+    - For single values, state directly without a table.
+    - For large result sets, summarize top items and offer to show more.
+
+
+  orchestration: |-
+    Role: You are a retail supply chain assistant for area managers and
+    store managers. You answer questions about inventory, orders, returns,
+    and finance across a multi-location retail network.
+
+    Users: Area managers evaluating rebalancing decisions, store managers
+    checking stock and return status. They are action-oriented and need
+    data-backed answers quickly.
+
+    Tool Selection Disambiguation:
+    - "Return rate" or "returns by SKU/condition/reason" → query_orders
+    - "Cost of returns" or "refurbishment cost" or "liquidation value" → query_finance
+    - "Stock available for returned items" or "where to send returns" → query_inventory
+    - For rebalancing decisions: call query_orders (return volumes), then
+      query_inventory (destination stock levels), then query_finance (shipping/refurb costs)
+    - For stockout risk: call query_inventory (on-hand vs reorder point), then
+      query_orders (demand forecast and open orders)
+    - Visualize results ONLY when showing trends, comparisons, or distributions
+      across 3+ data points. Do not chart single values.
+    - trigger_disposition_action: NEVER call without explicit user approval of
+      the specific action, SKU, quantity, and destination.
+
+    Multi-Tool Workflows:
+    - "Which returns should be rebalanced?": query_orders (return inflow by SKU
+      and condition) → query_inventory (understocked locations for those SKUs) →
+      query_finance (shipping cost vs margin recovery) → synthesize recommendation
+    - "Prioritize reorders": query_inventory (items below reorder point) →
+      query_orders (demand forecast for those SKUs) → rank by stockout urgency
+
+    Boundaries:
+    - You cannot modify inventory records — only trigger notification emails.
+    - Supplier and procurement data is not available.
+    - Never fabricate data. If a tool returns no results, say so clearly.
+    - Do not execute trigger_disposition_action without explicit user approval.
+
+    Defaults:
+    - When no time range is specified, use last 30 days.
+    - Parallelize independent tool calls for latency.
+    - If a question is ambiguous, ask the user to clarify rather than guessing.
+
+  sample_questions:
+    - question: "Which returned SKUs should be rebalanced this week?"
+    - question: "Show me the return rate trends for my location"
+    - question: "What is the current stock status across my locations?"
+    - question: "Analyze pending returns and recommend dispositions"
+    - question: "Which SKUs should I prioritize for reorder this week?"
+
+tools:
+  - tool_spec:
+      type: cortex_analyst_text_to_sql
+      name: query_inventory
+      description: |-
+        Retrieves current inventory positions across all retail locations.
+
+        Data Coverage:
+        - On-hand quantity, reserved stock, available units per SKU per location
+        - Reorder points and lead time days per SKU
+        - Product attributes: weight, category
+        - Location attributes: capacity, region, location type (store/warehouse/outlet)
+
+        When to Use:
+        - Current stock levels at any location ("How much of SKU-X is at Store 5?")
+        - Finding understocked locations (available < reorder point)
+        - Capacity checks ("Which locations have space for transfers?")
+        - Lead time inputs for stockout risk calculations
+        - Identifying destination candidates for rebalancing
+
+        When NOT to Use:
+        - Do NOT use for return volumes or return reasons (use query_orders)
+        - Do NOT use for demand forecasts or order volumes (use query_orders)
+        - Do NOT use for costs, margins, or financial metrics (use query_finance)
+        - Do NOT use for historical inventory changes (only current snapshot)
+
+  - tool_spec:
+      type: cortex_analyst_text_to_sql
+      name: query_orders
+      description: |-
+        Queries demand signals and customer returns across all channels and locations.
+
+        Data Coverage:
+        - Open orders by fulfillment location and channel
+        - Demand forecasts with confidence weighting per SKU per location
+        - Order volumes by channel (online, in-store, wholesale)
+        - Customer returns: SKU, location, item condition, return reason, return date
+        - Daily and weekly return rate trends
+        - Per-SKU return rates (returns / orders ratio)
+
+        When to Use:
+        - Return analysis: volumes, reasons, conditions, trends, rates
+        - Demand forecasting: expected demand by SKU and location
+        - Open order status and backlog
+        - Identifying high-return SKUs or locations
+        - Inflow data for rebalancing decisions (what is being returned where)
+
+        When NOT to Use:
+        - Do NOT use for current stock levels or reorder points (use query_inventory)
+        - Do NOT use for shipping costs, COGS, or margins (use query_finance)
+        - Do NOT use for refurbishment costs or liquidation values (use query_finance)
+        - Do NOT use for location capacity or attributes (use query_inventory)
+
+  - tool_spec:
+      type: cortex_analyst_text_to_sql
+      name: query_finance
+      description: |-
+        Queries financial and cost data for evaluating disposition economics.
+
+        Data Coverage:
+        - COGS and selling prices per SKU
+        - Margins by channel (online, in-store, outlet, wholesale)
+        - Liquidation values by SKU and condition
+        - Shipping costs between location pairs
+        - Refurbishment costs and success rates by item condition and category
+
+        When to Use:
+        - Evaluating restock vs transfer vs liquidation economics
+        - Shipping cost lookups between specific locations
+        - Margin analysis by channel or SKU
+        - Refurbishment ROI (cost vs success rate vs recovered value)
+        - "Is it worth shipping this item?" cost-benefit questions
+
+        When NOT to Use:
+        - Do NOT use for return volumes or return reasons (use query_orders)
+        - Do NOT use for stock levels or reorder points (use query_inventory)
+        - Do NOT use for demand forecasts (use query_orders)
+        - Do NOT use for location capacity (use query_inventory)
+
+  - tool_spec:
+      type: data_to_chart
+      name: data_to_chart
+      description: |-
+        Generates visualizations from query result data.
+
+        When to Use:
+        - Time-series trends (e.g., daily return rates over 30 days)
+        - Comparisons across categories (e.g., returns by location, margins by channel)
+        - Distributions (e.g., return reasons breakdown, stock levels by region)
+        - Any result set with 3+ data points that benefits from visual comparison
+
+        When NOT to Use:
+        - Single scalar values (state directly in text)
+        - Results with only 1-2 rows (use a brief text summary)
+        - Raw data dumps the user wants as a table
+
+  - tool_spec:
+      type: code_execution
+      name: code_execution
+
+  - tool_spec:
+      type: generic
+      name: trigger_disposition_action
+      description: |-
+        Triggers a disposition action (REBALANCE or LIQUIDATE) by generating an
+        AI-composed notification email and sending it to the specified recipient.
+        Use ONLY after the user has explicitly approved the disposition recommendation.
+        Requires Area Manager role.
+      input_schema:
+        type: object
+        properties:
+          action_type:
+            type: string
+            description: "Disposition action: 'REBALANCE' or 'LIQUIDATE'"
+          sku:
+            type: string
+            description: "Product SKU to action"
+          quantity:
+            type: integer
+            description: "Number of units"
+          from_location:
+            type: string
+            description: "Origin location ID (where the returned goods are)"
+          to_location:
+            type: string
+            description: "Destination location ID (for REBALANCE). Omit or pass null for LIQUIDATE."
+          recipient_email:
+            type: string
+            description: "Email address to send the notification to"
+        required:
+          - action_type
+          - sku
+          - quantity
+          - from_location
+          - recipient_email
+
+tool_resources:
+  query_inventory:
+    semantic_view: RETAIL_SUPPLY_CHAIN_DB.AGENT.INVENTORY_SV
+    execution_environment:
+      type: warehouse
+      warehouse: COCO_SANDBOX_WH
+      query_timeout: 299
+
+  query_orders:
+    semantic_view: RETAIL_SUPPLY_CHAIN_DB.AGENT.ORDERS_SV
+    execution_environment:
+      type: warehouse
+      warehouse: COCO_SANDBOX_WH
+      query_timeout: 299
+
+  query_finance:
+    semantic_view: RETAIL_SUPPLY_CHAIN_DB.AGENT.FINANCE_SV
+    execution_environment:
+      type: warehouse
+      warehouse: COCO_SANDBOX_WH
+      query_timeout: 299
+
+  trigger_disposition_action:
+    type: procedure
+    identifier: RETAIL_SUPPLY_CHAIN_DB.AGENT.TRIGGER_DISPOSITION_ACTION
+    execution_environment:
+      type: warehouse
+      warehouse: COCO_SANDBOX_WH
+
+  code_execution:
+    artifact_repositories:
+      - SNOWFLAKE.SNOWPARK.PYPI_SHARED_REPOSITORY
+
