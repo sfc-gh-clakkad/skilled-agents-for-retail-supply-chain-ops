@@ -223,7 +223,9 @@ SELECT SNOWFLAKE.CORTEX.INVOKE_AGENT(
 - "Analyze pending returns and recommend dispositions"
 - "Which SKUs should I prioritize for reorder this week?"
 
-## Evaluation
+## Evaluation (Forward Looking & Optional)
+
+**NOTE**: As of this writing in July 2026, evaluation of Cortex Agents using Code Exec is not part of the planned Public Preview release; However it is on the roadmap to be added for such agents.
 
 The `eval/` directory contains the evaluation dataset with a small representative subset of test scenarios for evaluating the agent's tool invocation accuracy using the TEA track of metrics, and its skill activation accuracy using a custom metric configured through the `eval/agent_eval_config.yaml` file.
 
