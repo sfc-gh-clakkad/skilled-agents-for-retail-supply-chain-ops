@@ -76,7 +76,6 @@ graph TD
     ├── profiles.yml
     ├── cortex_agents/
     │   ├── rebalancing_agent_with_skills.yml   # Agent spec (with skills)
-    │   ├── rebalancing_agent_no_skills.yml     # Agent spec (baseline, no skills)
     │   └── skills/
     │       ├── returns_rebalancing/
     │       │   └── SKILL.md                    # 7-step returns disposition workflow
