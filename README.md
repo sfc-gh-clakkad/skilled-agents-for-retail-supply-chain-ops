@@ -1,15 +1,15 @@
 # Skilled Agents for Retail Supply Chain
 
-This project builds an AI-powered retail supply chain co-worker built on [Snowflake Cortex Agents](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agent) and [Snowflake Co-Work](https://docs.snowflake.com/en/user-guide/snowflake-cortex/snowflake-cowork). It demonstrates how to extend a Cortex Agent beyond basic Q&A into a system that automates real-world inventory management workflows. The agent answers natural language questions about inventory, orders, returns, and finance across a multi-location retail network — and uses two specialized skills to orchestrate multi-step analytical workflows that go beyond simple data lookups.
+This project builds an AI-powered retail supply chain co-worker built on [Snowflake Cortex Agents](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agent) and [Snowflake Co-Work](https://docs.snowflake.com/en/user-guide/snowflake-cortex/snowflake-cowork). 
 
-The agent that powers CoWork automates not just the process of getting insights from retail supply chain data, but executes business processes as laid out through skills on a human operational manager's commands.
+It demonstrates how to extend a Cortex Agent beyond basic Q&A into a system that executes real-world inventory management workflows. In addition to providing insights into retail supply chain data domains - invetory, orders, shipping, returns etc - the agent utilizes two specialized business workflow skills to act on balancing inventory returns across locations, and analyzing potential stockout risks to then trigger re-stock orders for locations where demand forecast looks high.
 
-With such skilled co-workers, area managers and store managers for retailers that make inventory decisions on a daily basis can use a single pane of glass to understand their inventory state and trigger actions across locations.
+Governed exposure to this agent via Snowflake CoWork allows an area manager to getting faster insights from retail supply chain data while executing business processes as laid out through skills.
 
 
 ### What you'll build
 
-**Two production-style agent skills** automating real inventory management workflows:
+**Two business skills for the agent** automating real inventory management workflows:
 
 - **Returns-Driven Inventory Rebalancing** — A 7-step decision workflow that pulls return inflows, cross-references demand signals and item condition, evaluates transfer economics (shipping cost vs. margin recovery), and produces actionable RESTOCK / TRANSFER / LIQUIDATE recommendations with cost justification.
 
@@ -99,7 +99,7 @@ graph TD
 
 ## Getting Started
 
-This project is designed to be deployed using [Cortex Code](https://docs.snowflake.com/en/user-guide/cortex-code/cortex-code) — Snowflake's AI-powered IDE. A deployment skill automates the entire setup end-to-end, handling infrastructure creation, data seeding, dbt deployment, and agent creation interactively.
+This project is designed to be deployed using [Cortex Code](https://docs.snowflake.com/en/user-guide/cortex-code/cortex-code) — Snowflake's AI-powered IDE. A deployment skill is available with this repo to automate the entire setup end-to-end, including infrastructure creation, data seeding, dbt deployment, and agent creation interactively.
 
 > **Note:** The data model, reasoning steps in the skill, and calculations used throughout this project are illustrative of their real-life counterparts but may not exactly match any particular process. All of these pieces — the data schema, agent logic, and analytical formulas — can be adjusted when adopting this for your own workflows.
 
@@ -191,30 +191,9 @@ SHOW SEMANTIC VIEWS IN SCHEMA RETAIL_SUPPLY_CHAIN_DB.AGENT;
 
 Expected output: `RETAIL_OPS_AGENT` and three semantic views (`INVENTORY_SV`, `ORDERS_SV`, `FINANCE_SV`).
 
-### Step 3 (Optional): Evaluate the Agent
-
-Once deployed, you can run the built-in evaluation to measure agent quality. The evaluation dataset is deployed as part of the full deploy (via `eval/deploy_eval_dataset.sql`). To trigger an evaluation run:
-
-```sql
-CALL EXECUTE_AI_EVALUATION(
-  'START',
-  OBJECT_CONSTRUCT('run_name', 'baseline-v1'),
-  '@RETAIL_SUPPLY_CHAIN_DB.AGENT.EVAL_STAGE/agent_eval_config.yaml'
-);
-```
-
-This executes all test cases against the deployed agent and scores them on tool execution accuracy, logical consistency, and skill indicator coverage. See the [Evaluation](#evaluation) section below for more details.
-
 ## Using the Agent
 
-Once deployed, interact with the agent via Snowflake Intelligence or the API:
-
-```sql
-SELECT SNOWFLAKE.CORTEX.INVOKE_AGENT(
-    'RETAIL_SUPPLY_CHAIN_DB.AGENT.RETAIL_OPS_AGENT',
-    'Which returned SKUs should be rebalanced this week?'
-) AS RESPONSE;
-```
+Once deployed, interact with the agent via Snowflake CoWork:
 
 **Example questions:**
 - "Which returned SKUs should be rebalanced this week?"
@@ -222,58 +201,6 @@ SELECT SNOWFLAKE.CORTEX.INVOKE_AGENT(
 - "What is the current stock status across my locations?"
 - "Analyze pending returns and recommend dispositions"
 - "Which SKUs should I prioritize for reorder this week?"
-
-## Evaluation (Forward Looking & Optional)
-
-**NOTE**: As of this writing in July 2026, evaluation of Cortex Agents using Code Exec is not part of the planned Public Preview release; However it is on the roadmap to be added for such agents.
-
-The `eval/` directory contains the evaluation dataset with a small representative subset of test scenarios for evaluating the agent's tool invocation accuracy using the TEA track of metrics, and its skill activation accuracy using a custom metric configured through the `eval/agent_eval_config.yaml` file.
-
-This dataset is created for use with Snowflake's out-of-the-box implementation of a [GPA-framework for Cortex Agent evaluation](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents-evaluations).
-
-Snowflake-native evaluation framework that uses [`EXECUTE_AI_EVALUATION`](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agent#evaluating-agents) to trigger an evaluation run with the provided config.
-
-### What's included
-
-| File | Purpose |
-|------|---------|
-| `eval/deploy_eval_dataset.sql` | Creates and populates the `RETAIL_OPS_AGENT_EVAL_DATASET` table with golden test cases |
-| `eval/agent_eval_config.yaml` | Evaluation configuration — defines metrics, agent target, and custom scoring rubrics |
-
-The dataset is deployed automatically as part of the full deployment. The config YAML is uploaded to `@RETAIL_SUPPLY_CHAIN_DB.AGENT.EVAL_STAGE`.
-
-### Running an evaluation
-
-```sql
-CALL EXECUTE_AI_EVALUATION(
-  'START',
-  OBJECT_CONSTRUCT('run_name', 'baseline-v1'),
-  '@RETAIL_SUPPLY_CHAIN_DB.AGENT.EVAL_STAGE/agent_eval_config.yaml'
-);
-```
-
-Change the `run_name` value to label different runs (e.g., after modifying skills or the agent spec).
-
-You can also trigger the evaluation from Cortex Code. In the chat panel:
-
-> **"Run the agent evaluation with run name baseline-v1"**
-
-### Metrics
-
-The evaluation scores each test case on:
-
-- **tool_execution_accuracy** — Did the agent invoke the correct tools with appropriate inputs?
-- **logical_consistency** — Is the agent's reasoning coherent and grounded in the data?
-- **skill_indicator_coverage** (custom) — Did the agent follow the required reasoning steps defined in each test case's `skill_indicators` array?
-
-### Test case categories
-
-| Category | Description |
-|----------|-------------|
-| `general_query` | Basic lookups that require no skill activation |
-| `stockout_risk` | Queries that should trigger the stockout risk prioritization workflow |
-| `returns_rebalancing` | Queries that should trigger the returns disposition workflow |
-| `cross_domain` | Queries requiring both skills (reserved for future use) |
 
 ## Troubleshooting
 
